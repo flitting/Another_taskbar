@@ -1,12 +1,16 @@
+use crate::symbols::{
+    SYMBOL_ARCHIVED, SYMBOL_BLOCKED, SYMBOL_COMPLETED, SYMBOL_IN_PROGRESS, SYMBOL_PIN, SYMBOL_TODO,
+    SYMBOL_TREE_BRANCH, SYMBOL_TREE_LAST,
+};
 use crate::tasks::*;
 
 impl Task {
     pub fn display_single(&self) {
         // Display root task without connector
         let status_icon = self.get_status_icon();
-        let pin_icon = if self.pinned { "📌 " } else { "   " };
+        let pin_icon = if self.pinned { SYMBOL_PIN } else { " " };
 
-        println!("{}{}", pin_icon, self.format_task_info(&status_icon));
+        println!("{} {}", pin_icon, self.format_task_info(&status_icon));
 
         // Display all subtasks with tree structure
         for (index, subtask) in self.subtasks.iter().enumerate() {
@@ -17,12 +21,16 @@ impl Task {
 
     /// Display task as part of a tree structure
     fn display_tree(&self, prefix: &str, is_last: bool) {
-        let connector = if is_last { "└── " } else { "├── " };
+        let connector = if is_last {
+            SYMBOL_TREE_LAST
+        } else {
+            SYMBOL_TREE_BRANCH
+        };
         let status_icon = self.get_status_icon();
-        let pin_icon = if self.pinned { "📌 " } else { "   " };
+        let pin_icon = if self.pinned { SYMBOL_PIN } else { " " };
 
         println!(
-            "{}{}{}{}",
+            "{}{}{} {}",
             prefix,
             connector,
             pin_icon,
@@ -42,11 +50,11 @@ impl Task {
     /// Get status icon based on task state
     fn get_status_icon(&self) -> &str {
         match self.state {
-            TaskState::Todo => "○",
-            TaskState::InProgress => "◐",
-            TaskState::Blocked => "✗",
-            TaskState::Completed => "✓",
-            TaskState::Archived => "⇧",
+            TaskState::Todo => SYMBOL_TODO,
+            TaskState::InProgress => SYMBOL_IN_PROGRESS,
+            TaskState::Blocked => SYMBOL_BLOCKED,
+            TaskState::Completed => SYMBOL_COMPLETED,
+            TaskState::Archived => SYMBOL_ARCHIVED,
         }
     }
 
@@ -57,7 +65,11 @@ impl Task {
 
     /// Display detailed information about a task
     pub fn display_detail(&self) {
-        let pin_icon = if self.pinned { " 📌" } else { "" };
+        let pin_icon = if self.pinned {
+            format!(" {}", SYMBOL_PIN)
+        } else {
+            String::new()
+        };
 
         println!("{}{}", self.name, pin_icon);
         println!();

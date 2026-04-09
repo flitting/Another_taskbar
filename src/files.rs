@@ -5,6 +5,8 @@ use serde_json::{from_str, to_string_pretty};
 use std::fs::{read_to_string, write};
 use std::path::Path;
 
+pub const DEFAULT_TASKBAR_PATH: &str = "taskbar.json";
+
 /// Save a TaskManager to a JSON file at the specified path.
 ///
 /// # Arguments
@@ -75,12 +77,14 @@ pub fn load_taskbar<P: AsRef<Path>>(path: P) -> Result<TaskManager, String> {
 /// # Arguments
 /// * `manager` - A reference to the TaskManager to display
 pub fn display_all_tasks(manager: &TaskManager) {
-    if manager.root.subtasks.is_empty() {
+    let tasks = manager.filtered_tasks();
+
+    if tasks.is_empty() {
         println!("No tasks. Use 'add' to create a new task.");
         return;
     }
 
-    for subtask in &manager.root.subtasks {
+    for subtask in &tasks {
         subtask.display_single();
     }
 }

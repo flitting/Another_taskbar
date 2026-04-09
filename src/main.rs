@@ -1,10 +1,11 @@
 use std::env;
 
 mod app;
-mod display;
+mod cli_display;
 mod files;
 mod gui;
 mod input_parse;
+mod symbols;
 mod tasks;
 
 fn main() {
