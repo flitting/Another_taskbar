@@ -6,8 +6,8 @@ use rfd::FileDialog;
 
 use crate::files::{load_taskbar, save_taskbar, DEFAULT_TASKBAR_PATH};
 use crate::gui::settings::{
-    apply_saved_theme, available_theme_names, load_gui_settings, load_theme_palette,
-    save_gui_settings, GuiSettings,
+    apply_saved_theme, available_font_names, available_theme_names, font_option,
+    load_gui_settings, load_theme_palette, normalize_font_name, save_gui_settings, GuiSettings,
 };
 use crate::gui::theme::container_primary_style;
 use crate::tasks::{TaskDraft, TaskState};
@@ -18,8 +18,13 @@ impl Gui {
     pub(super) fn new_app() -> Self {
         let _ = crate::gui::settings::initialize_theme_files();
         let theme_settings = load_gui_settings();
+        let active_font_name = normalize_font_name(&theme_settings.selected_font);
+        let active_font = font_option(&active_font_name)
+            .map(|option| option.font)
+            .unwrap_or_else(crate::gui::settings::default_font);
         let available_theme_names =
             available_theme_names().unwrap_or_else(|_| vec!["dark".to_string()]);
+        let available_font_names = available_font_names();
         let mut active_theme_name = theme_settings.selected_theme.clone();
         if !available_theme_names
             .iter()
@@ -48,10 +53,14 @@ impl Gui {
             show_settings_menu: false,
             show_filter_menu: false,
             active_theme_name: active_theme_name.clone(),
+            active_font_name: active_font_name.clone(),
+            active_font,
             show_details_aside: theme_settings.show_details_aside,
             draft_theme_name: active_theme_name,
+            draft_font_name: active_font_name,
             draft_show_details_aside: theme_settings.show_details_aside,
             available_theme_names,
+            available_font_names,
             settings_status: None,
             settings_confirm_clear_all: false,
             draft_filter_tags,
@@ -483,16 +492,23 @@ impl Gui {
             Ok(palette) => {
                 crate::gui::theme::apply_theme_palette(palette);
                 self.active_theme_name = self.draft_theme_name.clone();
+                self.active_font_name = normalize_font_name(&self.draft_font_name);
+                self.active_font = font_option(&self.active_font_name)
+                    .map(|option| option.font)
+                    .unwrap_or_else(crate::gui::settings::default_font);
                 self.show_details_aside = self.draft_show_details_aside;
                 let settings = GuiSettings {
                     selected_theme: self.active_theme_name.clone(),
+                    selected_font: self.active_font_name.clone(),
                     show_details_aside: self.show_details_aside,
                 };
                 match save_gui_settings(&settings) {
                     Ok(()) => {
                         self.available_theme_names = available_theme_names()
                             .unwrap_or_else(|_| vec![self.active_theme_name.clone()]);
-                        self.settings_status = Some("Settings saved.".to_string());
+                        self.available_font_names = available_font_names();
+                        self.settings_status =
+                            Some("Settings saved. Restart the GUI to apply font changes everywhere.".to_string());
                         self.show_settings_menu = false;
                         self.settings_confirm_clear_all = false;
                     }

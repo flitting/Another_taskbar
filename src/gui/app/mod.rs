@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use iced::widget::text_editor;
 use iced::keyboard::key::Named;
-use iced::{event, executor, keyboard, Application, Command, Settings, Subscription, Theme};
+use iced::{event, executor, keyboard, Application, Command, Font, Settings, Subscription, Theme};
 
 use crate::tasks::{
     ImportanceFilter, PinnedFilter, StateFilter, TaskImportance, TaskManager, TaskState,
@@ -33,6 +33,7 @@ pub enum Message {
     ApplyFilterSelection,
     CancelFilterSelection,
     SelectTheme(String),
+    SelectFont(String),
     ToggleShowDetailsAside(bool),
     SaveSettings,
     CloseSettingsMenu,
@@ -91,10 +92,14 @@ pub struct Gui {
     pub show_settings_menu: bool,
     pub show_filter_menu: bool,
     pub active_theme_name: String,
+    pub active_font_name: String,
+    pub active_font: Font,
     pub show_details_aside: bool,
     pub draft_theme_name: String,
+    pub draft_font_name: String,
     pub draft_show_details_aside: bool,
     pub available_theme_names: Vec<String>,
+    pub available_font_names: Vec<String>,
     pub settings_status: Option<String>,
     pub settings_confirm_clear_all: bool,
     pub draft_filter_tags: Vec<String>,
@@ -182,8 +187,16 @@ impl Application for Gui {
 }
 
 pub fn run_gui_app() -> Result<(), String> {
+    let gui_settings = crate::gui::settings::load_gui_settings();
+    let active_font_name = crate::gui::settings::normalize_font_name(&gui_settings.selected_font);
+    let active_font = crate::gui::settings::font_option(&active_font_name)
+        .map(|option| option.font)
+        .unwrap_or_else(crate::gui::settings::default_font);
+
     Gui::run(Settings {
         window: iced::window::Settings::default(),
+        fonts: crate::gui::settings::bundled_font_bytes(),
+        default_font: active_font,
         ..Settings::default()
     })
     .map_err(|error| error.to_string())

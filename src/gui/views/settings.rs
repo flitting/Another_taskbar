@@ -1,7 +1,7 @@
 use iced::widget::{checkbox, pick_list, Column, Container, Row, Scrollable, Space, Text};
 use iced::{Alignment, Element, Length};
 
-use crate::gui::settings::{theme_path, THEMES_DIR};
+use crate::gui::settings::{font_file_path, theme_path, FONTS_DIR, THEMES_DIR};
 use crate::gui::theme::{
     container_menu_bg_light_style, current_theme_palette, dark_pick_list_style,
     dark_scrollable_style, modal_backdrop_style, ButtonSurface,
@@ -50,6 +50,27 @@ impl Gui {
                 .size(12),
             )
             .push(Text::new(format!("Active palette: {}", palette.name)).size(12))
+            .push(Text::new("Font").size(14))
+            .push(
+                pick_list(
+                    self.available_font_names.clone(),
+                    Some(self.draft_font_name.clone()),
+                    Message::SelectFont,
+                )
+                .placeholder("Select font")
+                .padding([8, 10])
+                .style(dark_pick_list_style())
+                .width(Length::Fill),
+            )
+            .push(
+                Text::new(format!(
+                    "Bundled font files live in '{}'. Current file: {}",
+                    FONTS_DIR,
+                    font_file_path(&self.draft_font_name).display()
+                ))
+                .size(12),
+            )
+            .push(Text::new("Font changes are applied on the next GUI launch.").size(12))
             .push(Text::new("Layout").size(14))
             .push(
                 checkbox("Show details aside", self.draft_show_details_aside)

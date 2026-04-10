@@ -65,7 +65,7 @@ impl CommandCompleter {
     }
 
     fn setting_keywords() -> Vec<&'static str> {
-        vec!["theme", "show_details_aside", "true", "false"]
+        vec!["theme", "font", "show_details_aside", "true", "false"]
     }
 }
 

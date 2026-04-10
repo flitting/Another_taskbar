@@ -6,7 +6,8 @@ use crate::files::{
     save_taskbar, taskbar_file_exists,
 };
 use crate::gui::settings::{
-    apply_saved_theme, import_theme_file, load_gui_settings, load_theme_palette, save_gui_settings,
+    apply_saved_theme, available_font_names, import_theme_file, load_gui_settings,
+    load_theme_palette, normalize_font_name, save_gui_settings,
 };
 use crate::tasks::*;
 
@@ -153,6 +154,7 @@ Examples:
         "setting" => println!(
             "help setting
   setting theme THEME_PATH
+  setting font FONT_NAME
   setting show_details_aside true|false
 
   Updates persisted GUI settings. Boolean settings use true or false."
@@ -702,8 +704,33 @@ fn setting_command(args: &[String]) {
         return;
     }
 
+    if eq_ci(setting_name, "font") {
+        let supported_fonts = available_font_names();
+        let normalized = normalize_font_name(setting_value);
+
+        if !supported_fonts.iter().any(|font_name| font_name == &normalized) {
+            println!(
+                "Unknown font '{}'. Supported fonts: {}.",
+                setting_value,
+                supported_fonts.join(", ")
+            );
+            return;
+        }
+
+        let mut settings = load_gui_settings();
+        settings.selected_font = normalized.clone();
+        match save_gui_settings(&settings) {
+            Ok(()) => println!(
+                "Font set to '{}'. Restart the GUI to apply it everywhere.",
+                normalized
+            ),
+            Err(error) => println!("{error}"),
+        }
+        return;
+    }
+
     println!(
-        "Unknown setting '{}'. Supported settings: theme, show_details_aside.",
+        "Unknown setting '{}'. Supported settings: theme, font, show_details_aside.",
         setting_name
     );
 }

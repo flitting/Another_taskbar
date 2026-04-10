@@ -1,21 +1,27 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use iced::Color;
+use iced::{Color, Font};
 use serde::{Deserialize, Serialize};
 
 use super::theme::{apply_theme_palette, ThemePalette};
 
+pub const FONTS_DIR: &str = "fonts";
 pub const THEMES_DIR: &str = "themes";
 pub const GUI_SETTINGS_PATH: &str = "settings.toml";
 const DEFAULT_THEME_NAME: &str = "dark";
+pub const DEFAULT_FONT_NAME: &str = "Noto Sans";
 
 const DARK_THEME_TOML: &str = include_str!("../../themes/dark.toml");
 const LIGHT_THEME_TOML: &str = include_str!("../../themes/light.toml");
+pub const NOTO_SANS_FONT_BYTES: &[u8] =
+    include_bytes!("../../fonts/NotoSans-VariableFont_wdth,wght.ttf");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GuiSettings {
     pub selected_theme: String,
+    #[serde(default = "default_font_name")]
+    pub selected_font: String,
     #[serde(default = "default_show_details_aside")]
     pub show_details_aside: bool,
 }
@@ -24,14 +30,34 @@ impl Default for GuiSettings {
     fn default() -> Self {
         Self {
             selected_theme: DEFAULT_THEME_NAME.to_string(),
+            selected_font: default_font_name(),
             show_details_aside: default_show_details_aside(),
         }
     }
 }
 
+fn default_font_name() -> String {
+    DEFAULT_FONT_NAME.to_string()
+}
+
 fn default_show_details_aside() -> bool {
     false
 }
+
+#[derive(Debug, Clone, Copy)]
+pub struct FontOption {
+    pub name: &'static str,
+    pub font: Font,
+    pub bytes: &'static [u8],
+    pub file_name: &'static str,
+}
+
+const FONT_OPTIONS: [FontOption; 1] = [FontOption {
+    name: DEFAULT_FONT_NAME,
+    font: Font::with_name(DEFAULT_FONT_NAME),
+    bytes: NOTO_SANS_FONT_BYTES,
+    file_name: "NotoSans-VariableFont_wdth,wght.ttf",
+}];
 
 #[derive(Debug, Clone, Deserialize)]
 struct ThemePaletteFile {
@@ -155,6 +181,46 @@ pub fn available_theme_names() -> Result<Vec<String>, String> {
     }
 
     Ok(names)
+}
+
+pub fn available_font_names() -> Vec<String> {
+    FONT_OPTIONS
+        .iter()
+        .map(|option| option.name.to_string())
+        .collect()
+}
+
+pub fn default_font() -> Font {
+    font_option(DEFAULT_FONT_NAME)
+        .map(|option| option.font)
+        .unwrap_or(Font::DEFAULT)
+}
+
+pub fn bundled_font_bytes() -> Vec<std::borrow::Cow<'static, [u8]>> {
+    FONT_OPTIONS
+        .iter()
+        .map(|option| std::borrow::Cow::Borrowed(option.bytes))
+        .collect()
+}
+
+pub fn font_option(name: &str) -> Option<FontOption> {
+    FONT_OPTIONS
+        .iter()
+        .copied()
+        .find(|option| option.name == name)
+}
+
+pub fn normalize_font_name(name: &str) -> String {
+    font_option(name)
+        .map(|option| option.name.to_string())
+        .unwrap_or_else(|| DEFAULT_FONT_NAME.to_string())
+}
+
+pub fn font_file_path(name: &str) -> PathBuf {
+    let file_name = font_option(name)
+        .map(|option| option.file_name)
+        .unwrap_or(FONT_OPTIONS[0].file_name);
+    Path::new(FONTS_DIR).join(file_name)
 }
 
 pub fn load_theme_palette(theme_name: &str) -> Result<ThemePalette, String> {
