@@ -1,4 +1,4 @@
-use crate::files::{load_taskbar, save_taskbar, DEFAULT_TASKBAR_PATH};
+use crate::files::{load_taskbar, save_taskbar, TaskbarDefaultPath, DEFAULT_TASKBAR_FILE_NAME};
 use crate::input_parse::{parse_input, CliAction};
 use crate::tasks::TaskManager;
 use rustyline::completion::{Completer, Pair};
@@ -7,7 +7,6 @@ use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
 use rustyline::{Context, Editor, Helper};
-use std::io::{self, Write};
 use std::path::PathBuf;
 
 /// Custom completer for command auto-completion
@@ -33,6 +32,7 @@ impl CommandCompleter {
                 "filter".to_string(),
                 "search".to_string(),
                 "undo".to_string(),
+                "wipe-data".to_string(),
                 "exit".to_string(),
                 "quit".to_string(),
             ],
@@ -188,30 +188,15 @@ impl Validator for CommandCompleter {}
 
 impl Helper for CommandCompleter {}
 
-/// Ask the user at startup whether they want to create a new taskbar or load an existing one.
-/// Returns true if the user wants to proceed, false if they want to quit.
-fn ask_startup_choice() -> bool {
-    loop {
-        print!("No taskbar found. Do you want to create a new taskbar? (y/n): ");
-        io::stdout().flush().unwrap();
-
-        let mut input = String::new();
-        match io::stdin().read_line(&mut input) {
-            Ok(_) => match input.trim().to_lowercase().as_str() {
-                "y" | "yes" => return true,
-                "n" | "no" => return false,
-                _ => println!("Please enter 'y' or 'n'."),
-            },
-            Err(_) => {
-                println!("Error reading input. Please try again.");
-            }
-        }
-    }
-}
-
 /// Run the interactive taskbar application loop in CLI mode.
 pub fn run_cli() {
-    let mut path = PathBuf::from(DEFAULT_TASKBAR_PATH);
+    if let Err(error) = crate::bootstrap::initialize_app_storage() {
+        eprintln!("Failed to initialize app storage: {error}");
+        return;
+    }
+
+    let mut path =
+        TaskbarDefaultPath::resolve().unwrap_or_else(|_| PathBuf::from(DEFAULT_TASKBAR_FILE_NAME));
 
     let mut manager = match load_taskbar(path.as_path()) {
         Ok(m) => {
@@ -219,10 +204,6 @@ pub fn run_cli() {
             m
         }
         Err(_) => {
-            if !ask_startup_choice() {
-                println!("Exiting...");
-                return;
-            }
             println!("Starting with a new taskbar.");
             TaskManager::new()
         }

@@ -4,12 +4,12 @@ use std::path::{Path, PathBuf};
 use iced::{Color, Font};
 use serde::{Deserialize, Serialize};
 
+use crate::app_paths;
+
 use super::theme::{apply_theme_palette, ThemePalette};
 
-pub const FONTS_DIR: &str = "fonts";
-pub const THEMES_DIR: &str = "themes";
-pub const GUI_SETTINGS_PATH: &str = "settings.toml";
 const DEFAULT_THEME_NAME: &str = "dark";
+const LIGHT_THEME_NAME: &str = "light";
 pub const DEFAULT_FONT_NAME: &str = "Noto Sans";
 pub const DEFAULT_SYMBOL_FONT_NAME: &str = "Noto Sans Symbols 2";
 
@@ -140,45 +140,45 @@ impl ThemePaletteFile {
 }
 
 pub fn initialize_theme_files() -> Result<(), String> {
-    fs::create_dir_all(THEMES_DIR)
+    fs::create_dir_all(custom_themes_dir()?)
         .map_err(|error| format!("Failed to create themes dir: {error}"))?;
-
-    ensure_theme_file("dark.toml", DARK_THEME_TOML)?;
-    ensure_theme_file("light.toml", LIGHT_THEME_TOML)?;
 
     Ok(())
 }
 
-fn ensure_theme_file(name: &str, contents: &str) -> Result<(), String> {
-    let path = Path::new(THEMES_DIR).join(name);
-    if path.exists() {
-        return Ok(());
-    }
-
-    fs::write(&path, contents)
-        .map_err(|error| format!("Failed to write {}: {error}", path.display()))
-}
-
 pub fn load_gui_settings() -> GuiSettings {
-    fs::read_to_string(GUI_SETTINGS_PATH)
-        .ok()
-        .and_then(|content| toml::from_str(&content).ok())
-        .unwrap_or_default()
+    let path = match gui_settings_path() {
+        Ok(path) => path,
+        Err(_) => return GuiSettings::default(),
+    };
+
+    match fs::read_to_string(&path) {
+        Ok(content) => toml::from_str(&content).unwrap_or_default(),
+        Err(_) => {
+            let settings = GuiSettings::default();
+            let _ = save_gui_settings(&settings);
+            settings
+        }
+    }
 }
 
 pub fn save_gui_settings(settings: &GuiSettings) -> Result<(), String> {
     let content = toml::to_string_pretty(settings)
         .map_err(|error| format!("Failed to serialize settings: {error}"))?;
-    fs::write(GUI_SETTINGS_PATH, content)
-        .map_err(|error| format!("Failed to save settings: {error}"))
+    let path = gui_settings_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create config dir: {error}"))?;
+    }
+    fs::write(path, content).map_err(|error| format!("Failed to save settings: {error}"))
 }
 
 pub fn available_theme_names() -> Result<Vec<String>, String> {
     initialize_theme_files()?;
 
-    let mut names = Vec::new();
-    let entries =
-        fs::read_dir(THEMES_DIR).map_err(|error| format!("Failed to read themes dir: {error}"))?;
+    let mut names = vec![DEFAULT_THEME_NAME.to_string(), LIGHT_THEME_NAME.to_string()];
+    let entries = fs::read_dir(custom_themes_dir()?)
+        .map_err(|error| format!("Failed to read themes dir: {error}"))?;
 
     for entry in entries {
         let entry = entry.map_err(|error| format!("Failed to read theme entry: {error}"))?;
@@ -266,14 +266,14 @@ pub fn font_file_path(name: &str) -> PathBuf {
     let file_name = font_option(name)
         .map(|option| option.file_name)
         .unwrap_or(FONT_OPTIONS[0].file_name);
-    Path::new(FONTS_DIR).join(file_name)
+    Path::new("[embedded fonts]").join(file_name)
 }
 
 pub fn symbol_font_file_path(name: &str) -> PathBuf {
     let file_name = symbol_font_option(name)
         .map(|option| option.file_name)
         .unwrap_or(SYMBOL_FONT_OPTIONS[0].file_name);
-    Path::new(FONTS_DIR).join(file_name)
+    Path::new("[embedded fonts]").join(file_name)
 }
 
 pub fn fallback_text_font() -> Font {
@@ -298,8 +298,14 @@ pub fn bundled_font_bytes_with_fallback() -> Vec<std::borrow::Cow<'static, [u8]>
 pub fn load_theme_palette(theme_name: &str) -> Result<ThemePalette, String> {
     initialize_theme_files()?;
 
-    let path = theme_path(theme_name);
-    load_theme_palette_from_path(&path, theme_name)
+    match theme_name {
+        DEFAULT_THEME_NAME => load_theme_palette_from_str(DARK_THEME_TOML, DEFAULT_THEME_NAME),
+        LIGHT_THEME_NAME => load_theme_palette_from_str(LIGHT_THEME_TOML, LIGHT_THEME_NAME),
+        _ => {
+            let path = theme_path(theme_name)?;
+            load_theme_palette_from_path(&path, theme_name)
+        }
+    }
 }
 
 pub fn load_theme_palette_from_path(
@@ -314,6 +320,16 @@ pub fn load_theme_palette_from_path(
     file.into_palette(fallback_name)
 }
 
+pub fn load_theme_palette_from_str(
+    content: &str,
+    fallback_name: &str,
+) -> Result<ThemePalette, String> {
+    let file: ThemePaletteFile = toml::from_str(content)
+        .map_err(|error| format!("Failed to parse built-in theme '{fallback_name}': {error}"))?;
+
+    file.into_palette(fallback_name)
+}
+
 pub fn import_theme_file(path: &Path) -> Result<String, String> {
     initialize_theme_files()?;
 
@@ -321,7 +337,7 @@ pub fn import_theme_file(path: &Path) -> Result<String, String> {
         .file_stem()
         .and_then(|stem| stem.to_str())
         .ok_or_else(|| format!("Invalid theme filename: {}", path.display()))?;
-    let target = theme_path(stem);
+    let target = theme_path(stem)?;
 
     let content = fs::read_to_string(path)
         .map_err(|error| format!("Failed to read theme '{}': {error}", path.display()))?;
@@ -337,8 +353,6 @@ pub fn import_theme_file(path: &Path) -> Result<String, String> {
 }
 
 pub fn apply_saved_theme() -> Result<ThemePalette, String> {
-    initialize_theme_files()?;
-
     let settings = load_gui_settings();
     let palette = load_theme_palette(&settings.selected_theme)
         .or_else(|_| load_theme_palette(DEFAULT_THEME_NAME))?;
@@ -346,8 +360,16 @@ pub fn apply_saved_theme() -> Result<ThemePalette, String> {
     Ok(palette)
 }
 
-pub fn theme_path(theme_name: &str) -> PathBuf {
-    Path::new(THEMES_DIR).join(format!("{theme_name}.toml"))
+pub fn theme_path(theme_name: &str) -> Result<PathBuf, String> {
+    Ok(custom_themes_dir()?.join(format!("{theme_name}.toml")))
+}
+
+pub fn custom_themes_dir() -> Result<PathBuf, String> {
+    app_paths::themes_dir()
+}
+
+pub fn gui_settings_path() -> Result<PathBuf, String> {
+    app_paths::gui_settings_path()
 }
 
 fn parse_hex_color(input: &str) -> Result<Color, String> {

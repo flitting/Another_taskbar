@@ -1,10 +1,10 @@
 use chrono::{DateTime, Datelike, NaiveDate, Timelike, Utc};
 use iced::widget::{text_editor, Container, Row};
-use iced::{Alignment, Element, Length};
+use iced::{Alignment, Command, Element, Length};
 use iced_aw::Modal;
 use rfd::FileDialog;
 
-use crate::files::{load_taskbar, save_taskbar, DEFAULT_TASKBAR_PATH};
+use crate::files::{load_taskbar, save_taskbar, TaskbarDefaultPath, DEFAULT_TASKBAR_FILE_NAME};
 use crate::gui::settings::{
     apply_saved_theme, available_font_names, available_symbol_font_names, available_theme_names,
     font_option, load_gui_settings, load_theme_palette, normalize_font_name,
@@ -17,7 +17,9 @@ use super::{DateField, Gui, Message, SidePanel};
 
 impl Gui {
     pub(super) fn new_app() -> Self {
-        let _ = crate::gui::settings::initialize_theme_files();
+        let _ = crate::bootstrap::initialize_app_storage();
+        let default_taskbar_path = TaskbarDefaultPath::resolve()
+            .unwrap_or_else(|_| std::path::PathBuf::from(DEFAULT_TASKBAR_FILE_NAME));
         let theme_settings = load_gui_settings();
         let active_font_name = normalize_font_name(&theme_settings.selected_font);
         let active_font = font_option(&active_font_name)
@@ -45,7 +47,7 @@ impl Gui {
             })
         });
 
-        let manager = load_taskbar(DEFAULT_TASKBAR_PATH).unwrap_or_default();
+        let manager = load_taskbar(&default_taskbar_path).unwrap_or_default();
         let draft_available_tags = manager.available_tags.clone();
         let draft_filter_tags = manager.active_filter_tags.clone();
         let draft_importance_filter = manager.active_importance_filter.clone();
@@ -74,12 +76,13 @@ impl Gui {
             available_symbol_font_names,
             settings_status: None,
             settings_confirm_clear_all: false,
+            settings_confirm_clear_data_and_exit: false,
             draft_filter_tags,
             draft_importance_filter,
             draft_urgency_filter,
             draft_state_filter,
             draft_pinned_filter,
-            task_file_path: std::path::PathBuf::from(DEFAULT_TASKBAR_PATH),
+            task_file_path: default_taskbar_path,
             hovered_task: None,
             detail_name: text_editor::Content::new(),
             detail_description: text_editor::Content::new(),
@@ -174,7 +177,7 @@ impl Gui {
                 self.task_file_path
                     .file_name()
                     .and_then(|value| value.to_str())
-                    .unwrap_or(DEFAULT_TASKBAR_PATH),
+                    .unwrap_or(DEFAULT_TASKBAR_FILE_NAME),
             );
 
         let Some(path) = dialog.save_file() else {
@@ -528,6 +531,7 @@ impl Gui {
                         self.settings_status = Some("Settings saved.".to_string());
                         self.show_settings_menu = false;
                         self.settings_confirm_clear_all = false;
+                        self.settings_confirm_clear_data_and_exit = false;
                     }
                     Err(error) => {
                         self.settings_status = Some(error);
@@ -540,47 +544,65 @@ impl Gui {
         }
     }
 
+    pub(super) fn clear_all_data_and_exit(&self) -> Command<Message> {
+        match crate::app_paths::clear_app_data() {
+            Ok(()) => {
+                std::process::exit(0);
+            }
+            Err(error) => {
+                eprintln!("Failed to clear app data: {error}");
+                Command::none()
+            }
+        }
+    }
+
     pub(super) fn handle_escape_shortcut(&mut self) {
         if self.show_settings_menu {
-            self.handle_message(Message::CloseSettingsMenu);
+            let _ = self.handle_message(Message::CloseSettingsMenu);
             return;
         }
 
         if self.show_filter_menu {
-            self.handle_message(Message::CancelFilterSelection);
+            let _ = self.handle_message(Message::CancelFilterSelection);
             return;
         }
 
         if self.active_date_panel.is_some() {
-            self.handle_message(Message::ToggleDatePanel(
+            let _ = self.handle_message(Message::ToggleDatePanel(
                 self.active_date_panel.expect("date panel checked as some"),
             ));
             return;
         }
 
-        if matches!(self.side_panel, Some(SidePanel::Detail(_) | SidePanel::Create(_))) {
-            self.handle_message(Message::CloseDetail);
+        if matches!(
+            self.side_panel,
+            Some(SidePanel::Detail(_) | SidePanel::Create(_))
+        ) {
+            let _ = self.handle_message(Message::CloseDetail);
         }
     }
 
     pub(super) fn handle_submit_shortcut(&mut self) {
         if self.show_settings_menu {
-            self.handle_message(Message::SaveSettings);
+            let _ = self.handle_message(Message::SaveSettings);
             return;
         }
 
         if self.show_filter_menu {
-            self.handle_message(Message::ApplyFilterSelection);
+            let _ = self.handle_message(Message::ApplyFilterSelection);
             return;
         }
 
         if self.active_date_panel.is_some() {
-            self.handle_message(Message::ApplyDateSelection);
+            let _ = self.handle_message(Message::ApplyDateSelection);
             return;
         }
 
-        if matches!(self.side_panel, Some(SidePanel::Detail(_) | SidePanel::Create(_))) {
-            self.handle_message(Message::SaveDetail);
+        if matches!(
+            self.side_panel,
+            Some(SidePanel::Detail(_) | SidePanel::Create(_))
+        ) {
+            let _ = self.handle_message(Message::SaveDetail);
         }
     }
 }

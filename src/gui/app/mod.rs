@@ -5,8 +5,8 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
-use iced::widget::text_editor;
 use iced::keyboard::key::Named;
+use iced::widget::text_editor;
 use iced::{event, executor, keyboard, Application, Command, Font, Settings, Subscription, Theme};
 
 use crate::tasks::{
@@ -42,6 +42,8 @@ pub enum Message {
     LoadTaskFileFrom,
     RequestClearAllTasks,
     ConfirmClearAllTasks,
+    RequestClearAllDataAndExit,
+    ConfirmClearAllDataAndExit,
     HoverTaskEnter(u32),
     HoverTaskExit(u32),
     TogglePinned(u32),
@@ -107,6 +109,7 @@ pub struct Gui {
     pub available_symbol_font_names: Vec<String>,
     pub settings_status: Option<String>,
     pub settings_confirm_clear_all: bool,
+    pub settings_confirm_clear_data_and_exit: bool,
     pub draft_filter_tags: Vec<String>,
     pub draft_importance_filter: ImportanceFilter,
     pub draft_urgency_filter: UrgencyFilter,
@@ -156,8 +159,7 @@ impl Application for Gui {
     }
 
     fn update(&mut self, message: Message) -> Command<Self::Message> {
-        self.handle_message(message);
-        Command::none()
+        self.handle_message(message)
     }
 
     fn view(&self) -> iced::Element<'_, Message> {
@@ -192,6 +194,8 @@ impl Application for Gui {
 }
 
 pub fn run_gui_app() -> Result<(), String> {
+    crate::bootstrap::initialize_app_storage()?;
+
     let gui_settings = crate::gui::settings::load_gui_settings();
     let active_font_name = crate::gui::settings::normalize_font_name(&gui_settings.selected_font);
     let active_font = crate::gui::settings::font_option(&active_font_name)

@@ -5,7 +5,7 @@ pub use cli::run_cli;
 pub use gui::run_gui;
 
 /// Parse the command-line arguments to determine which mode to run.
-/// Returns "cli" by default, or "gui" if --gui/-g is specified.
+/// Returns "gui" by default, or "cli" if --cli/-c is specified.
 /// Exits the program if --help/-h is specified or invalid arguments are provided.
 pub fn parse_mode(args: &[String]) -> &'static str {
     if let Some(arg) = args.get(1) {
@@ -23,7 +23,7 @@ pub fn parse_mode(args: &[String]) -> &'static str {
             }
         }
     } else {
-        "cli"
+        "gui"
     }
 }
 
@@ -35,13 +35,13 @@ fn print_help() {
     println!("    cli_taskbar [MODE]");
     println!();
     println!("MODES:");
-    println!("    --cli, -c       Run in CLI mode (default)");
-    println!("    --gui, -g       Run in GUI mode");
+    println!("    --gui, -g       Run in GUI mode (default)");
+    println!("    --cli, -c       Run in CLI mode");
     println!("    --help, -h      Show this help message");
     println!();
     println!("EXAMPLES:");
-    println!("    cli_taskbar                 # Run in CLI mode (default)");
-    println!("    cli_taskbar --cli           # Explicitly run in CLI mode");
-    println!("    cli_taskbar --gui           # Run in GUI mode");
+    println!("    cli_taskbar                 # Run in GUI mode");
+    println!("    cli_taskbar --cli           # Run in CLI mode");
+    println!("    cli_taskbar --gui           # Explicitly run in GUI mode");
     println!("    cli_taskbar --help          # Show this help message");
 }

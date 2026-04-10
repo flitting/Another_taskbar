@@ -60,9 +60,7 @@ impl Gui {
             ));
         }
 
-        content = content
-            .push(Self::view_filter_tag_rows(tag_items))
-            .push(
+        content = content.push(Self::view_filter_tag_rows(tag_items)).push(
             Row::new()
                 .spacing(8)
                 .push(self.view_action_button(

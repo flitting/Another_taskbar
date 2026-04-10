@@ -32,10 +32,7 @@ impl Gui {
                 Row::new()
                     .spacing(8)
                     .align_items(Alignment::Center)
-                    .push_maybe(
-                        self.draft_pinned
-                            .then(|| self.symbol_text(SYMBOL_PIN, 20)),
-                    )
+                    .push_maybe(self.draft_pinned.then(|| self.symbol_text(SYMBOL_PIN, 20)))
                     .push(self.view_task_name_editor())
                     .push(Space::with_width(Length::Fill))
                     .push(self.view_close_button()),
@@ -55,11 +52,7 @@ impl Gui {
                         .style(dark_pick_list_style())
                         .width(action_width),
                     )
-                    .push(self.view_pinned_button(
-                        task.id,
-                        self.draft_pinned,
-                        action_width,
-                    ))
+                    .push(self.view_pinned_button(task.id, self.draft_pinned, action_width))
                     .push_maybe(self.can_undo().then(|| {
                         self.view_action_button_with_width(
                             "Undo",

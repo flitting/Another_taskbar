@@ -10,7 +10,9 @@ use super::super::app::{Gui, Message};
 
 impl Gui {
     pub fn symbol_text<'a, S: Into<String>>(&self, label: S, size: u16) -> Text<'a> {
-        Text::new(label.into()).font(self.active_symbol_font).size(size)
+        Text::new(label.into())
+            .font(self.active_symbol_font)
+            .size(size)
     }
 
     pub fn view_action_button<'a, S: Into<String>, T: Into<String>>(

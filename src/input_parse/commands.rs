@@ -66,6 +66,10 @@ pub(crate) fn run_command_group(
             }
             Err(error) => println!("{error}"),
         }
+    } else if eq_ci(command, "wipe-data") {
+        if wipe_data_command(&tokens[1..]) {
+            return CliAction::Exit;
+        }
     } else if eq_ci(command, "exit") || eq_ci(command, "quit") {
         match save_taskbar(current_path.as_path(), manager) {
             Ok(_) => println!("Saved to {}", current_path.display()),
@@ -97,6 +101,7 @@ fn print_help(args: &[String]) {
   filter ...                    - Manage tag filters
   search \"STRING\"               - Search tasks by name or description
   undo                          - Undo the last change
+  wipe-data [--yes]             - Delete all app data and exit immediately
   exit | quit                   - Save and exit
   help                          - Show this message
   help COMMAND_NAME             - Show exact help for one command
@@ -185,6 +190,13 @@ Examples:
   Searches task names and descriptions. Search is separate from filters and does not affect undo."
         ),
         "undo" => println!("help undo\n  undo\n\n  Reverts the last undoable task change."),
+        "wipe-data" => println!(
+            "help wipe-data
+  wipe-data [--yes]
+
+  Permanently removes the app's config, tasks, cache, and custom themes, then exits.
+  Use --yes to skip the confirmation prompt."
+        ),
         "list" => println!("help list\n  list\n\n  Displays all tasks."),
         "show" => {
             println!("help show\n  show <id>\n\n  Displays detailed information for one task.")
@@ -630,6 +642,38 @@ fn save_command(args: &[String], manager: &TaskManager, current_path: &mut PathB
     }
 }
 
+fn wipe_data_command(args: &[String]) -> bool {
+    let skip_confirm = args.iter().any(|arg| eq_ci(arg, "--yes"));
+
+    if !skip_confirm {
+        print!("Delete all app data, settings, and custom themes, then exit immediately? (y/n): ");
+        io::stdout().flush().unwrap();
+        let mut confirm = String::new();
+        if io::stdin().read_line(&mut confirm).is_err() {
+            println!("wipe-data cancelled.");
+            return false;
+        }
+        match confirm.trim().to_lowercase().as_str() {
+            "y" | "yes" => {}
+            _ => {
+                println!("wipe-data cancelled.");
+                return false;
+            }
+        }
+    }
+
+    match crate::app_paths::clear_app_data() {
+        Ok(()) => {
+            println!("All app data removed.");
+            true
+        }
+        Err(error) => {
+            println!("Failed to remove app data: {error}");
+            false
+        }
+    }
+}
+
 fn load_command(args: &[String], manager: &mut TaskManager, current_path: &mut PathBuf) {
     let path = match parse_optional_file_arg(args) {
         Ok(path) => path.unwrap_or_else(|| current_path.clone()),
@@ -710,7 +754,10 @@ fn setting_command(args: &[String]) {
         let supported_fonts = available_font_names();
         let normalized = normalize_font_name(setting_value);
 
-        if !supported_fonts.iter().any(|font_name| font_name == &normalized) {
+        if !supported_fonts
+            .iter()
+            .any(|font_name| font_name == &normalized)
+        {
             println!(
                 "Unknown font '{}'. Supported fonts: {}.",
                 setting_value,
@@ -735,7 +782,10 @@ fn setting_command(args: &[String]) {
         let supported_fonts = available_symbol_font_names();
         let normalized = normalize_symbol_font_name(setting_value);
 
-        if !supported_fonts.iter().any(|font_name| font_name == &normalized) {
+        if !supported_fonts
+            .iter()
+            .any(|font_name| font_name == &normalized)
+        {
             println!(
                 "Unknown symbol font '{}'. Supported symbol fonts: {}.",
                 setting_value,

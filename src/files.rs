@@ -1,11 +1,20 @@
 // save the taskbar into json file and load taskbar from the json file.
 
+use crate::app_paths;
 use crate::tasks::*;
 use serde_json::{from_str, to_string_pretty};
-use std::fs::{read_to_string, write};
-use std::path::Path;
+use std::fs::{create_dir_all, read_to_string, write};
+use std::path::{Path, PathBuf};
 
-pub const DEFAULT_TASKBAR_PATH: &str = "taskbar.json";
+pub const DEFAULT_TASKBAR_FILE_NAME: &str = "tasks.json";
+
+pub struct TaskbarDefaultPath;
+
+impl TaskbarDefaultPath {
+    pub fn resolve() -> Result<PathBuf, String> {
+        app_paths::taskbar_path()
+    }
+}
 
 /// Save a TaskManager to a JSON file at the specified path.
 ///
@@ -17,6 +26,10 @@ pub const DEFAULT_TASKBAR_PATH: &str = "taskbar.json";
 /// * `Ok(())` on success
 /// * `Err(String)` if serialization or file writing fails
 pub fn save_taskbar<P: AsRef<Path>>(path: P, manager: &TaskManager) -> Result<(), String> {
+    if let Some(parent) = path.as_ref().parent() {
+        create_dir_all(parent).map_err(|e| format!("Failed to create taskbar directory: {}", e))?;
+    }
+
     let json =
         to_string_pretty(manager).map_err(|e| format!("Failed to serialize taskbar: {}", e))?;
 
@@ -138,12 +151,7 @@ pub fn count_all_tasks(manager: &TaskManager) -> usize {
     }
 
     // Count all subtasks of root, excluding root itself (id=0)
-    manager
-        .root
-        .subtasks
-        .iter()
-        .map(count_recursive)
-        .sum()
+    manager.root.subtasks.iter().map(count_recursive).sum()
 }
 
 /// Count tasks by their state.

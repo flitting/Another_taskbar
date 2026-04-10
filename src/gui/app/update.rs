@@ -1,7 +1,10 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use iced::widget::text_editor;
+use iced::Command;
 
-use crate::gui::settings::{available_font_names, available_symbol_font_names, available_theme_names};
+use crate::gui::settings::{
+    available_font_names, available_symbol_font_names, available_theme_names,
+};
 use crate::tasks::{
     ImportanceFilter, PinnedFilter, StateFilter, TaskImportance, TaskManager, TaskUrgency,
     UrgencyFilter,
@@ -10,7 +13,7 @@ use crate::tasks::{
 use super::{DateField, Gui, Message, SidePanel};
 
 impl Gui {
-    pub(super) fn handle_message(&mut self, message: Message) {
+    pub(super) fn handle_message(&mut self, message: Message) -> Command<Message> {
         match message {
             Message::ToggleCollapse(id) => {
                 if self.collapsed.contains(&id) {
@@ -49,6 +52,7 @@ impl Gui {
                     self.draft_show_details_aside = self.show_details_aside;
                     self.settings_status = None;
                     self.settings_confirm_clear_all = false;
+                    self.settings_confirm_clear_data_and_exit = false;
                 }
             }
             Message::ToggleFilterMenu => {
@@ -144,21 +148,25 @@ impl Gui {
                 self.draft_theme_name = theme_name;
                 self.settings_status = None;
                 self.settings_confirm_clear_all = false;
+                self.settings_confirm_clear_data_and_exit = false;
             }
             Message::SelectFont(font_name) => {
                 self.draft_font_name = font_name;
                 self.settings_status = None;
                 self.settings_confirm_clear_all = false;
+                self.settings_confirm_clear_data_and_exit = false;
             }
             Message::SelectSymbolFont(font_name) => {
                 self.draft_symbol_font_name = font_name;
                 self.settings_status = None;
                 self.settings_confirm_clear_all = false;
+                self.settings_confirm_clear_data_and_exit = false;
             }
             Message::ToggleShowDetailsAside(value) => {
                 self.draft_show_details_aside = value;
                 self.settings_status = None;
                 self.settings_confirm_clear_all = false;
+                self.settings_confirm_clear_data_and_exit = false;
             }
             Message::SaveSettings => {
                 self.save_settings();
@@ -171,6 +179,7 @@ impl Gui {
                 self.draft_show_details_aside = self.show_details_aside;
                 self.settings_status = None;
                 self.settings_confirm_clear_all = false;
+                self.settings_confirm_clear_data_and_exit = false;
             }
             Message::SaveTaskFileAs => {
                 self.save_task_file_as();
@@ -180,6 +189,7 @@ impl Gui {
             }
             Message::RequestClearAllTasks => {
                 self.settings_confirm_clear_all = true;
+                self.settings_confirm_clear_data_and_exit = false;
                 self.settings_status =
                     Some("Click 'Confirm Clear' to remove all tasks.".to_string());
             }
@@ -190,12 +200,23 @@ impl Gui {
                 self.hovered_task = None;
                 self.delete_confirmation_for = None;
                 self.settings_confirm_clear_all = false;
+                self.settings_confirm_clear_data_and_exit = false;
                 self.persist_changes();
                 self.sync_detail_content();
                 self.settings_status = Some(format!(
                     "Cleared all tasks and saved {}.",
                     self.task_file_path.display()
                 ));
+            }
+            Message::RequestClearAllDataAndExit => {
+                self.settings_confirm_clear_all = false;
+                self.settings_confirm_clear_data_and_exit = true;
+                self.settings_status = Some(
+                    "Click 'Confirm Exit' to permanently delete all app data and quit.".to_string(),
+                );
+            }
+            Message::ConfirmClearAllDataAndExit => {
+                return self.clear_all_data_and_exit();
             }
             Message::HoverTaskEnter(id) => {
                 self.hovered_task = Some(id);
@@ -432,5 +453,7 @@ impl Gui {
                 self.handle_submit_shortcut();
             }
         }
+
+        Command::none()
     }
 }

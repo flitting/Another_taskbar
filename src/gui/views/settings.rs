@@ -2,7 +2,7 @@ use iced::widget::{checkbox, pick_list, Column, Container, Row, Scrollable, Spac
 use iced::{Alignment, Element, Length};
 
 use crate::gui::settings::{
-    font_file_path, symbol_font_file_path, theme_path, FONTS_DIR, THEMES_DIR,
+    custom_themes_dir, font_file_path, gui_settings_path, symbol_font_file_path, theme_path,
 };
 use crate::gui::theme::{
     container_menu_bg_light_style, current_theme_palette, dark_pick_list_style,
@@ -45,9 +45,13 @@ impl Gui {
             )
             .push(
                 Text::new(format!(
-                    "Built-in and custom theme files live in '{}'. Current file: {}",
-                    THEMES_DIR,
-                    theme_path(&self.draft_theme_name).display()
+                    "Built-in themes are embedded. Custom themes live in '{}'. Current source: {}",
+                    custom_themes_dir()
+                        .map(|path| path.display().to_string())
+                        .unwrap_or_else(|_| "<unavailable>".to_string()),
+                    theme_path(&self.draft_theme_name)
+                        .map(|path| path.display().to_string())
+                        .unwrap_or_else(|_| format!("[embedded theme] {}.toml", self.draft_theme_name))
                 ))
                 .size(12),
             )
@@ -66,8 +70,7 @@ impl Gui {
             )
             .push(
                 Text::new(format!(
-                    "Bundled font files live in '{}'. Current file: {}",
-                    FONTS_DIR,
+                    "Bundled fonts are embedded in the binary. Current font asset: {}",
                     font_file_path(&self.draft_font_name).display()
                 ))
                 .size(12),
@@ -86,9 +89,19 @@ impl Gui {
             )
             .push(
                 Text::new(format!(
-                    "Symbol glyphs use '{}'. Current file: {}",
+                    "Symbol glyphs use '{}'. Current asset: {}",
                     self.draft_symbol_font_name,
                     symbol_font_file_path(&self.draft_symbol_font_name).display()
+                ))
+                .size(12),
+            )
+            .push(Text::new("Storage").size(14))
+            .push(
+                Text::new(format!(
+                    "Settings file: {}",
+                    gui_settings_path()
+                        .map(|path| path.display().to_string())
+                        .unwrap_or_else(|_| "<unavailable>".to_string())
                 ))
                 .size(12),
             )
@@ -145,6 +158,27 @@ impl Gui {
                         )
                     })),
             );
+
+        content = content.push(
+            Row::new()
+                .spacing(8)
+                .push(self.view_action_button(
+                    "Clear Data + Exit",
+                    14,
+                    Some(Message::RequestClearAllDataAndExit),
+                    ButtonSurface::Highlight,
+                    "Delete all app data, custom themes, and settings, then exit immediately.",
+                ))
+                .push_maybe(self.settings_confirm_clear_data_and_exit.then(|| {
+                    self.view_action_button(
+                        "Confirm Exit",
+                        14,
+                        Some(Message::ConfirmClearAllDataAndExit),
+                        ButtonSurface::Highlight,
+                        "Permanently remove all app data and exit now.",
+                    )
+                })),
+        );
 
         if let Some(status) = &self.settings_status {
             content = content.push(Text::new(status).size(12));

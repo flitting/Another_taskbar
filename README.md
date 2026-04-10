@@ -28,18 +28,18 @@ cargo build --release
 
 ## Run
 
-CLI mode is the default:
+GUI mode is the default:
 
 ```bash
-cargo run
-cargo run -- --cli
+
+another_taskbar --cli
 ```
 
 GUI mode:
 
 ```bash
-cargo run -- --gui
-cargo run --release -- --gui
+another_taskbar
+another_taskbar --gui
 ```
 
 ## CLI
@@ -85,7 +85,7 @@ load --file work.json list stats
 Launch the GUI with:
 
 ```bash
-cargo run -- --gui
+another_taskbar --gui
 ```
 
 The GUI includes:

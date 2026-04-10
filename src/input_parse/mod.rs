@@ -15,8 +15,22 @@ pub enum CliAction {
 }
 
 const ROOT_COMMANDS: &[&str] = &[
-    "help", "add", "update", "delete", "list", "show", "stats", "save", "load", "setting",
-    "filter", "search", "undo", "exit", "quit",
+    "help",
+    "add",
+    "update",
+    "delete",
+    "list",
+    "show",
+    "stats",
+    "save",
+    "load",
+    "setting",
+    "filter",
+    "search",
+    "undo",
+    "wipe-data",
+    "exit",
+    "quit",
 ];
 
 pub fn parse_input(
