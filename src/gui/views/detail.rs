@@ -32,7 +32,10 @@ impl Gui {
                 Row::new()
                     .spacing(8)
                     .align_items(Alignment::Center)
-                    .push_maybe(self.draft_pinned.then(|| Text::new(SYMBOL_PIN).size(20)))
+                    .push_maybe(
+                        self.draft_pinned
+                            .then(|| self.symbol_text(SYMBOL_PIN, 20)),
+                    )
                     .push(self.view_task_name_editor())
                     .push(Space::with_width(Length::Fill))
                     .push(self.view_close_button()),
@@ -52,16 +55,9 @@ impl Gui {
                         .style(dark_pick_list_style())
                         .width(action_width),
                     )
-                    .push(self.view_action_button_with_width(
-                        format!("{SYMBOL_PIN} Pinned"),
-                        16,
-                        Some(Message::TogglePinned(task.id)),
-                        if self.draft_pinned {
-                            ButtonSurface::Highlight
-                        } else {
-                            ButtonSurface::Tertiary
-                        },
-                        "Pin or unpin this task.",
+                    .push(self.view_pinned_button(
+                        task.id,
+                        self.draft_pinned,
                         action_width,
                     ))
                     .push_maybe(self.can_undo().then(|| {
@@ -222,18 +218,7 @@ impl Gui {
                         .style(dark_pick_list_style())
                         .width(action_width),
                     )
-                    .push(self.view_action_button_with_width(
-                        format!("{SYMBOL_PIN} Pinned"),
-                        16,
-                        Some(Message::TogglePinned(0)),
-                        if self.draft_pinned {
-                            ButtonSurface::Highlight
-                        } else {
-                            ButtonSurface::Tertiary
-                        },
-                        "Pin or unpin this task.",
-                        action_width,
-                    ))
+                    .push(self.view_pinned_button(0, self.draft_pinned, action_width))
                     .push_maybe(self.can_undo().then(|| {
                         self.view_action_button_with_width(
                             "Undo",
@@ -442,8 +427,8 @@ impl Gui {
     }
 
     fn view_close_button<'a>(&self) -> Element<'a, Message> {
-        self.view_action_button(
-            "X",
+        self.view_symbol_action_button(
+            "✕",
             14,
             Some(Message::CloseDetail),
             ButtonSurface::Tertiary,
@@ -570,7 +555,7 @@ impl Gui {
         }
 
         selected_tag_items.push((
-            self.view_action_button(
+            self.view_symbol_action_button(
                 SYMBOL_ADD,
                 16,
                 self.can_add_more_tags().then_some(Message::ToggleTagEditor),
@@ -652,6 +637,32 @@ impl Gui {
 
     fn estimated_tag_button_width(tag: &str) -> f32 {
         TAG_BUTTON_BASE_WIDTH + tag.chars().count() as f32 * TAG_BUTTON_CHAR_WIDTH
+    }
+
+    fn view_pinned_button<'a>(
+        &self,
+        task_id: u32,
+        pinned: bool,
+        width: Length,
+    ) -> Element<'a, Message> {
+        let surface = if pinned {
+            ButtonSurface::Highlight
+        } else {
+            ButtonSurface::Tertiary
+        };
+
+        let content = Row::new()
+            .spacing(8)
+            .align_items(Alignment::Center)
+            .push(self.symbol_text(SYMBOL_PIN, 16))
+            .push(Text::new("Pinned").size(16));
+
+        Button::new(content)
+            .padding([8, 12])
+            .width(width)
+            .style(crate::gui::theme::action_button_style(surface))
+            .on_press(Message::TogglePinned(task_id))
+            .into()
     }
 
     fn view_wrapped_button_rows<'a>(

@@ -22,7 +22,7 @@ impl Gui {
                     .align_items(Alignment::Center)
                     .push(Text::new("Filter").size(22))
                     .push(Space::with_width(Length::Fill))
-                    .push(self.view_action_button(
+                    .push(self.view_symbol_action_button(
                         SYMBOL_CLOSE,
                         14,
                         Some(Message::CancelFilterSelection),

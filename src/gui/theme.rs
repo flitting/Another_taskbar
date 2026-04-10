@@ -192,7 +192,7 @@ pub fn all_task_state_icon_options() -> Vec<TaskStateIconOption> {
 }
 
 pub fn task_state_label(state: &TaskState) -> String {
-    format!("{} {}", task_state_icon(state), state)
+    state.to_string()
 }
 
 pub fn format_date(date: chrono::DateTime<chrono::Utc>) -> String {

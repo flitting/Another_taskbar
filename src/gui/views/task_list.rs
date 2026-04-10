@@ -43,7 +43,7 @@ impl Gui {
                         },
                         "Clear the current search text and show all matching filter results again.",
                     ))
-                    .push(self.view_action_button(
+                    .push(self.view_symbol_action_button(
                         SYMBOL_SETTINGS,
                         18,
                         Some(Message::ToggleSettingsMenu),
@@ -72,7 +72,7 @@ impl Gui {
                         },
                         "Undo the most recent saved change.",
                     ))
-                    .push(self.view_action_button(
+                    .push(self.view_symbol_action_button(
                         SYMBOL_ADD,
                         14,
                         Some(Message::OpenCreateRoot),
@@ -150,7 +150,7 @@ impl Gui {
             } else {
                 SYMBOL_EXPANDED
             };
-            task_container_row = task_container_row.push(self.view_plain_button(
+            task_container_row = task_container_row.push(self.view_symbol_plain_button(
                 symbol,
                 16,
                 Some(Message::ToggleCollapse(task.id)),
@@ -169,6 +169,7 @@ impl Gui {
                 )
                 .padding([6, 12])
                 .text_size(14)
+                .font(self.active_symbol_font)
                 .style(compact_dark_pick_list_style())
                 .width(Length::Fixed(40.0)),
             )
@@ -188,7 +189,7 @@ impl Gui {
                 task_container_row =
                     task_container_row.push(stripes.push(Space::with_width(Length::Fixed(8.0))));
             }
-            task_container_row = task_container_row.push(self.view_plain_button(
+            task_container_row = task_container_row.push(self.view_symbol_plain_button(
                 SYMBOL_PIN,
                 16,
                 Some(Message::TogglePinned(task.id)),
@@ -198,7 +199,7 @@ impl Gui {
                     palette.text_muted
                 },
             ));
-            task_container_row = task_container_row.push(self.view_plain_button(
+            task_container_row = task_container_row.push(self.view_symbol_plain_button(
                 SYMBOL_ADD,
                 18,
                 Some(Message::OpenCreateChild(task.id)),

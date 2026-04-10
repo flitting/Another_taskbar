@@ -1,7 +1,7 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use iced::widget::text_editor;
 
-use crate::gui::settings::{available_font_names, available_theme_names};
+use crate::gui::settings::{available_font_names, available_symbol_font_names, available_theme_names};
 use crate::tasks::{
     ImportanceFilter, PinnedFilter, StateFilter, TaskImportance, TaskManager, TaskUrgency,
     UrgencyFilter,
@@ -42,8 +42,10 @@ impl Gui {
                     self.available_theme_names = available_theme_names()
                         .unwrap_or_else(|_| vec![self.active_theme_name.clone()]);
                     self.available_font_names = available_font_names();
+                    self.available_symbol_font_names = available_symbol_font_names();
                     self.draft_theme_name = self.active_theme_name.clone();
                     self.draft_font_name = self.active_font_name.clone();
+                    self.draft_symbol_font_name = self.active_symbol_font_name.clone();
                     self.draft_show_details_aside = self.show_details_aside;
                     self.settings_status = None;
                     self.settings_confirm_clear_all = false;
@@ -148,6 +150,11 @@ impl Gui {
                 self.settings_status = None;
                 self.settings_confirm_clear_all = false;
             }
+            Message::SelectSymbolFont(font_name) => {
+                self.draft_symbol_font_name = font_name;
+                self.settings_status = None;
+                self.settings_confirm_clear_all = false;
+            }
             Message::ToggleShowDetailsAside(value) => {
                 self.draft_show_details_aside = value;
                 self.settings_status = None;
@@ -160,6 +167,7 @@ impl Gui {
                 self.show_settings_menu = false;
                 self.draft_theme_name = self.active_theme_name.clone();
                 self.draft_font_name = self.active_font_name.clone();
+                self.draft_symbol_font_name = self.active_symbol_font_name.clone();
                 self.draft_show_details_aside = self.show_details_aside;
                 self.settings_status = None;
                 self.settings_confirm_clear_all = false;

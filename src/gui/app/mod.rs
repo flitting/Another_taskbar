@@ -34,6 +34,7 @@ pub enum Message {
     CancelFilterSelection,
     SelectTheme(String),
     SelectFont(String),
+    SelectSymbolFont(String),
     ToggleShowDetailsAside(bool),
     SaveSettings,
     CloseSettingsMenu,
@@ -94,12 +95,16 @@ pub struct Gui {
     pub active_theme_name: String,
     pub active_font_name: String,
     pub active_font: Font,
+    pub active_symbol_font_name: String,
+    pub active_symbol_font: Font,
     pub show_details_aside: bool,
     pub draft_theme_name: String,
     pub draft_font_name: String,
+    pub draft_symbol_font_name: String,
     pub draft_show_details_aside: bool,
     pub available_theme_names: Vec<String>,
     pub available_font_names: Vec<String>,
+    pub available_symbol_font_names: Vec<String>,
     pub settings_status: Option<String>,
     pub settings_confirm_clear_all: bool,
     pub draft_filter_tags: Vec<String>,
@@ -192,10 +197,15 @@ pub fn run_gui_app() -> Result<(), String> {
     let active_font = crate::gui::settings::font_option(&active_font_name)
         .map(|option| option.font)
         .unwrap_or_else(crate::gui::settings::default_font);
+    let active_symbol_font_name =
+        crate::gui::settings::normalize_symbol_font_name(&gui_settings.selected_symbol_font);
+    let _active_symbol_font = crate::gui::settings::symbol_font_option(&active_symbol_font_name)
+        .map(|option| option.font)
+        .unwrap_or_else(crate::gui::settings::default_symbol_font);
 
     Gui::run(Settings {
         window: iced::window::Settings::default(),
-        fonts: crate::gui::settings::bundled_font_bytes(),
+        fonts: crate::gui::settings::bundled_font_bytes_with_fallback(),
         default_font: active_font,
         ..Settings::default()
     })
