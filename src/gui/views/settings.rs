@@ -1,11 +1,12 @@
-use iced::widget::{checkbox, pick_list, Column, Container, Row, Space, Text};
+use iced::widget::{checkbox, pick_list, Column, Container, Row, Scrollable, Space, Text};
 use iced::{Alignment, Element, Length};
 
 use crate::gui::settings::{theme_path, THEMES_DIR};
 use crate::gui::theme::{
     container_menu_bg_light_style, current_theme_palette, dark_pick_list_style,
-    modal_backdrop_style, ButtonSurface,
+    dark_scrollable_style, modal_backdrop_style, ButtonSurface,
 };
+use crate::symbols::SYMBOL_CLOSE;
 
 use super::super::app::{Gui, Message};
 
@@ -14,7 +15,20 @@ impl Gui {
         let palette = current_theme_palette();
         let mut content = Column::new()
             .spacing(14)
-            .push(Text::new("Settings").size(22))
+            .push(
+                Row::new()
+                    .spacing(8)
+                    .align_items(Alignment::Center)
+                    .push(Text::new("Settings").size(22))
+                    .push(Space::with_width(Length::Fill))
+                    .push(self.view_action_button(
+                        SYMBOL_CLOSE,
+                        14,
+                        Some(Message::CloseSettingsMenu),
+                        ButtonSurface::Tertiary,
+                        "Close the settings panel without saving draft changes.",
+                    )),
+            )
             .push(Text::new("Theme").size(14))
             .push(
                 pick_list(
@@ -113,11 +127,16 @@ impl Gui {
                 )),
         );
 
-        Container::new(content)
-            .padding(18)
-            .width(Length::Fixed(360.0))
-            .style(container_menu_bg_light_style)
-            .into()
+        Container::new(
+            Scrollable::new(content)
+                .style(dark_scrollable_style())
+                .height(Length::Fixed(620.0))
+                .width(Length::Fill),
+        )
+        .padding(24)
+        .width(Length::Fixed(560.0))
+        .style(container_menu_bg_light_style)
+        .into()
     }
 
     pub fn view_settings_overlay(&self) -> Element<'_, Message> {
@@ -131,7 +150,7 @@ impl Gui {
                         .push(self.view_settings_modal())
                         .push(Space::with_width(Length::Fill)),
                 )
-                .push(Space::with_height(Length::FillPortion(2))),
+                .push(Space::with_height(Length::FillPortion(1))),
         )
         .width(Length::Fill)
         .height(Length::Fill)

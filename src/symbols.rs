@@ -8,5 +8,6 @@ pub const SYMBOL_ARCHIVED: &str = "⇧";
 pub const SYMBOL_PIN: &str = "★";
 pub const SYMBOL_ADD: &str = "+";
 pub const SYMBOL_SETTINGS: &str = "⚙";
+pub const SYMBOL_CLOSE: &str = "✕";
 pub const SYMBOL_TREE_LAST: &str = "└── ";
 pub const SYMBOL_TREE_BRANCH: &str = "├── ";

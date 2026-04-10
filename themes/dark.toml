@@ -1,25 +1,49 @@
 name = "Dark"
+# Window background behind the task list and side panels.
 primary_bg = "#191A26"
+# Main task list / detail panel surface.
 secondary_bg = "#232434"
+# Elevated cards like task rows and grouped controls.
 tertiary_bg = "#2F3142"
+# Background for pinned task cards.
 pinned_bg = "#4A3420"
+# Accent border and focus color.
 accent_color = "#4A86CF"
-highlight_bg = "#5A4AA2"
+# Highlighted button background.
+highlight_bg = "#57526f"
+# Selected or active control background.
 selection_bg = "#3977B8"
+# Primary text color for titles and body text.
 text_primary = "#F3F3FA"
+# Secondary text color for supporting labels.
 text_secondary = "#B5B7C7"
+# Muted text color for low-emphasis icons and copy.
 text_muted = "#7D8092"
+# Popup / modal menu background.
 menu_bg = "#414457"
+# Tooltip bubble background.
 tooltip_bg = "#161822"
+# Inactive tag chip background.
 tag_bg = "#3A3C45"
+# Active/selected tag chip background.
 tag_active_bg = "#666A7E"
+# Text input and editor field background.
 input_bg = "#1D1F2B"
+# Todo state icon color.
 todo_color = "#7387BA"
+# In-progress state icon color.
 in_progress_color = "#E0AC47"
+# Blocked state icon color.
 blocked_color = "#D47272"
+# Completed state icon color and completed-task strike accent.
 completed_color = "#74C787"
+# Archived state icon color.
 archived_color = "#7D8092"
+# Stripe color for high-importance tasks.
 importance_high_stripe = "#DB4B4B"
+# Stripe color for low-importance tasks.
 importance_low_stripe = "#48BF63"
+# Stripe color for high-urgency tasks.
 urgency_high_stripe = "#EA8A2B"
+# Stripe color for low-urgency tasks.
 urgency_low_stripe = "#6AD3FA"

@@ -1,3 +1,4 @@
+use iced::alignment::Horizontal;
 use iced::widget::{tooltip, Button, Container, Text};
 use iced::{Element, Length};
 
@@ -37,21 +38,34 @@ impl Gui {
         .into()
     }
 
-    pub fn view_menu_button<'a, T: Into<String>>(
+    pub fn view_action_button_with_width<'a, S: Into<String>, T: Into<String>>(
         &self,
-        label: String,
-        message: Message,
+        label: S,
+        size: u16,
+        message: Option<Message>,
+        surface: ButtonSurface,
         explanation: T,
+        width: Length,
     ) -> Element<'a, Message> {
-        let button = Button::new(Text::new(label).size(14).width(Length::Fill))
-            .padding([12, 16])
-            .width(Length::Fixed(160.0))
-            .style(action_button_style(ButtonSurface::Highlight))
-            .on_press(message);
+        let label = label.into();
+        let explanation = explanation.into();
+        let mut button = Button::new(
+            Text::new(label)
+                .size(size)
+                .width(Length::Fill)
+                .horizontal_alignment(Horizontal::Center),
+        )
+        .padding([8, 12])
+        .width(width)
+        .style(action_button_style(surface));
+
+        if let Some(message) = message {
+            button = button.on_press(message);
+        }
 
         tooltip(
             button,
-            Container::new(Text::new(explanation.into()).size(12))
+            Container::new(Text::new(explanation).size(12))
                 .padding([8, 10])
                 .style(tooltip_container_style),
             tooltip::Position::Top,

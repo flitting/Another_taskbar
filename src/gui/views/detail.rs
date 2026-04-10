@@ -4,18 +4,28 @@ use iced::widget::{
 use iced::{Alignment, Element, Length};
 
 use crate::gui::theme::{
-    container_highlight_style, container_secondary_style, container_tertiary_style,
-    dark_pick_list_style, dark_text_input_style, detail_text_editor_style, modal_backdrop_style,
-    text_primary_container_style, ButtonSurface,
+    all_task_state_options, container_highlight_style, container_input_style,
+    container_secondary_style, container_tertiary_style, dark_pick_list_style,
+    dark_scrollable_style, dark_text_input_style, detail_text_editor_style,
+    popup_window_inner_style, popup_window_style, task_state_option, text_primary_container_style,
+    ButtonSurface,
 };
 use crate::symbols::{SYMBOL_ADD, SYMBOL_PIN};
 use crate::tasks::Task;
 
-use super::super::app::{DateField, DetailField, Gui, Message};
+use super::super::app::{DateField, Gui, Message};
+
+const DESCRIPTION_EDITOR_HEIGHT: f32 = 148.0;
+const DESCRIPTION_VISIBLE_LINES: usize = 6;
+const TAG_ROW_WRAP_WIDTH: f32 = 560.0;
+const TAG_BUTTON_BASE_WIDTH: f32 = 28.0;
+const TAG_BUTTON_CHAR_WIDTH: f32 = 8.5;
+const TAG_ROW_MAX_ITEMS: usize = 6;
 
 impl Gui {
-    pub fn view_detail<'a>(&'a self, task: &'a Task) -> Element<'a, Message> {
+    pub fn view_detail<'a>(&'a self, task: &'a Task, floating: bool) -> Element<'a, Message> {
         let has_subtasks = !task.subtasks.is_empty();
+        let action_width = Length::Fixed(152.0);
         let header = Column::new()
             .spacing(8)
             .push(
@@ -23,28 +33,26 @@ impl Gui {
                     .spacing(8)
                     .align_items(Alignment::Center)
                     .push_maybe(self.draft_pinned.then(|| Text::new(SYMBOL_PIN).size(20)))
-                    .push(
-                        text_input("Task name", &self.detail_name.text())
-                            .on_input(Message::DetailNameChanged)
-                            .padding([6, 0])
-                            .size(28)
-                            .style(dark_text_input_style())
-                            .width(Length::Fill),
-                    )
-                    .push(Space::with_width(Length::Fill)),
+                    .push(self.view_task_name_editor())
+                    .push(Space::with_width(Length::Fill))
+                    .push(self.view_close_button()),
             )
             .push(
                 Row::new()
                     .spacing(8)
                     .align_items(Alignment::Center)
-                    .push(self.view_action_button(
-                        self.state_button_label(),
-                        14,
-                        Some(Message::ToggleStateMenu(task.id)),
-                        ButtonSurface::Highlight,
-                        "Choose the current state for this task.",
-                    ))
-                    .push(self.view_action_button(
+                    .push(
+                        pick_list(
+                            all_task_state_options(),
+                            Some(task_state_option(&self.draft_state)),
+                            move |selected| Message::SelectState(task.id, selected.state),
+                        )
+                        .padding([8, 12])
+                        .text_size(14)
+                        .style(dark_pick_list_style())
+                        .width(action_width),
+                    )
+                    .push(self.view_action_button_with_width(
                         format!("{SYMBOL_PIN} Pinned"),
                         16,
                         Some(Message::TogglePinned(task.id)),
@@ -54,14 +62,16 @@ impl Gui {
                             ButtonSurface::Tertiary
                         },
                         "Pin or unpin this task.",
+                        action_width,
                     ))
                     .push_maybe(self.can_undo().then(|| {
-                        self.view_action_button(
+                        self.view_action_button_with_width(
                             "Undo",
                             14,
                             Some(Message::UndoLastChange),
                             ButtonSurface::Tertiary,
                             "Undo the most recent saved change.",
+                            action_width,
                         )
                     })),
             );
@@ -70,55 +80,41 @@ impl Gui {
             Column::new()
                 .spacing(6)
                 .push(Text::new("Description").size(14))
+                .push(self.view_description_editor()),
+        );
+
+        detail_col = detail_col.push(
+            Column::new()
+                .spacing(8)
                 .push(
-                    Container::new(
-                        text_editor(&self.detail_description)
-                            .on_action(|action| {
-                                Message::DetailTextAction(DetailField::Description, action)
-                            })
-                            .padding(0)
-                            .style(detail_text_editor_style()),
-                    )
-                    .padding(12)
-                    .width(Length::Fill)
-                    .style(container_tertiary_style),
+                    Row::new()
+                        .spacing(8)
+                        .push(self.view_detail_meta_button_fill(
+                            self.urgency_label(),
+                            Message::CycleUrgency,
+                        ))
+                        .push(self.view_detail_meta_button_fill(
+                            self.importance_label(),
+                            Message::CycleImportance,
+                        )),
+                )
+                .push(
+                    Row::new()
+                        .spacing(8)
+                        .push(self.view_detail_meta_button_fill(
+                            self.date_button_label(DateField::DueDate),
+                            Message::ToggleDatePanel(DateField::DueDate),
+                        ))
+                        .push(self.view_detail_meta_button_fill(
+                            self.date_button_label(DateField::CompletedAt),
+                            Message::ToggleDatePanel(DateField::CompletedAt),
+                        )),
                 ),
         );
 
-        detail_col =
-            detail_col.push(
-                Column::new()
-                    .spacing(8)
-                    .push(
-                        Row::new()
-                            .spacing(8)
-                            .push(self.view_detail_meta_button(
-                                self.urgency_label(),
-                                Message::CycleUrgency,
-                            ))
-                            .push(self.view_detail_meta_button(
-                                self.importance_label(),
-                                Message::CycleImportance,
-                            )),
-                    )
-                    .push(
-                        Row::new()
-                            .spacing(8)
-                            .push(self.view_detail_meta_button(
-                                self.date_button_label(DateField::DueDate),
-                                Message::ToggleDatePanel(DateField::DueDate),
-                            ))
-                            .push(self.view_detail_meta_button(
-                                self.date_button_label(DateField::CompletedAt),
-                                Message::ToggleDatePanel(DateField::CompletedAt),
-                            )),
-                    ),
-            );
-
-        detail_col = detail_col.push(self.view_tag_picker());
-
         detail_col = detail_col
-            .push(Column::new().spacing(10).push_maybe(self.view_date_panel()))
+            .push_maybe(self.view_date_panel())
+            .push(self.view_tag_picker())
             .push_maybe(
                 (self.delete_confirmation_for == Some(task.id) && has_subtasks).then(|| {
                     Container::new(
@@ -172,60 +168,88 @@ impl Gui {
                     ))
                     .push(Space::with_width(Length::Fill))
                     .push(
-                        Text::new(self.detail_dates.text())
+                        Text::new(self.detail_timestamp_text(task))
                             .size(12)
                             .width(Length::Shrink),
                     ),
             );
 
-        Container::new(
+        let mut surface = Container::new(
             Scrollable::new(Container::new(detail_col).padding(16).width(Length::Fill))
+                .style(dark_scrollable_style())
                 .height(Length::Fill)
                 .width(Length::FillPortion(1)),
         )
         .padding(16)
-        .height(Length::Fill)
-        .style(container_secondary_style)
-        .into()
+        .height(Length::Fill);
+
+        if floating {
+            surface = surface.style(popup_window_inner_style);
+        } else {
+            surface = surface.style(container_secondary_style);
+        }
+
+        surface.into()
     }
 
-    pub fn view_create_task<'a>(&'a self, parent_id: Option<u32>) -> Element<'a, Message> {
-        let title = match parent_id {
-            Some(_) => "New Subtask",
-            None => "New Task",
-        };
-
+    pub fn view_create_task<'a>(
+        &'a self,
+        _parent_id: Option<u32>,
+        floating: bool,
+    ) -> Element<'a, Message> {
+        let action_width = Length::Fixed(152.0);
         let detail_col = Column::new()
             .spacing(16)
-            .push(Text::new(title).size(28))
             .push(
-                Container::new(
-                    text_editor(&self.detail_name)
-                        .on_action(|action| Message::DetailTextAction(DetailField::Name, action))
-                        .padding(0)
-                        .style(detail_text_editor_style()),
-                )
-                .padding([8, 10])
-                .width(Length::Fill)
-                .style(container_tertiary_style),
+                Row::new()
+                    .spacing(8)
+                    .align_items(Alignment::Center)
+                    .push(self.view_task_name_editor())
+                    .push(self.view_close_button()),
+            )
+            .push(
+                Row::new()
+                    .spacing(8)
+                    .align_items(Alignment::Center)
+                    .push(
+                        pick_list(
+                            all_task_state_options(),
+                            Some(task_state_option(&self.draft_state)),
+                            move |selected| Message::SelectState(0, selected.state),
+                        )
+                        .padding([8, 12])
+                        .text_size(14)
+                        .style(dark_pick_list_style())
+                        .width(action_width),
+                    )
+                    .push(self.view_action_button_with_width(
+                        format!("{SYMBOL_PIN} Pinned"),
+                        16,
+                        Some(Message::TogglePinned(0)),
+                        if self.draft_pinned {
+                            ButtonSurface::Highlight
+                        } else {
+                            ButtonSurface::Tertiary
+                        },
+                        "Pin or unpin this task.",
+                        action_width,
+                    ))
+                    .push_maybe(self.can_undo().then(|| {
+                        self.view_action_button_with_width(
+                            "Undo",
+                            14,
+                            Some(Message::UndoLastChange),
+                            ButtonSurface::Tertiary,
+                            "Undo the most recent saved change.",
+                            action_width,
+                        )
+                    })),
             )
             .push(
                 Column::new()
                     .spacing(6)
                     .push(Text::new("Description").size(14))
-                    .push(
-                        Container::new(
-                            text_editor(&self.detail_description)
-                                .on_action(|action| {
-                                    Message::DetailTextAction(DetailField::Description, action)
-                                })
-                                .padding(0)
-                                .style(detail_text_editor_style()),
-                        )
-                        .padding(12)
-                        .width(Length::Fill)
-                        .style(container_tertiary_style),
-                    ),
+                    .push(self.view_description_editor()),
             )
             .push(
                 Column::new()
@@ -233,11 +257,11 @@ impl Gui {
                     .push(
                         Row::new()
                             .spacing(8)
-                            .push(self.view_detail_meta_button(
+                            .push(self.view_detail_meta_button_fill(
                                 self.urgency_label(),
                                 Message::CycleUrgency,
                             ))
-                            .push(self.view_detail_meta_button(
+                            .push(self.view_detail_meta_button_fill(
                                 self.importance_label(),
                                 Message::CycleImportance,
                             )),
@@ -245,17 +269,17 @@ impl Gui {
                     .push(
                         Row::new()
                             .spacing(8)
-                            .push(self.view_detail_meta_button(
+                            .push(self.view_detail_meta_button_fill(
                                 self.date_button_label(DateField::DueDate),
                                 Message::ToggleDatePanel(DateField::DueDate),
                             ))
-                            .push(self.view_detail_meta_button(
+                            .push(self.view_detail_meta_button_fill(
                                 self.date_button_label(DateField::CompletedAt),
                                 Message::ToggleDatePanel(DateField::CompletedAt),
                             )),
-                    )
-                    .push_maybe(self.view_date_panel()),
+                    ),
             )
+            .push_maybe(self.view_date_panel())
             .push(self.view_tag_picker())
             .push(
                 Row::new()
@@ -286,54 +310,56 @@ impl Gui {
                     ),
             );
 
-        Container::new(
+        let mut surface = Container::new(
             Scrollable::new(Container::new(detail_col).padding(16).width(Length::Fill))
+                .style(dark_scrollable_style())
                 .height(Length::Fill)
                 .width(Length::FillPortion(1)),
         )
         .padding(16)
-        .height(Length::Fill)
-        .style(container_secondary_style)
-        .into()
+        .height(Length::Fill);
+
+        if floating {
+            surface = surface.style(popup_window_inner_style);
+        } else {
+            surface = surface.style(container_secondary_style);
+        }
+
+        surface.into()
     }
 
     pub fn view_side_panel_overlay(&self) -> Option<Element<'_, Message>> {
         let panel = self.side_panel?;
 
-        let modal: Element<'_, Message> = match panel {
+        match panel {
             super::super::app::SidePanel::Detail(task_id) => {
                 let task = self.manager.root.search_by_id_ref(task_id)?;
-                Container::new(self.view_detail(task))
-                    .width(Length::Fixed(640.0))
-                    .height(Length::FillPortion(4))
-                    .into()
-            }
-            super::super::app::SidePanel::Create(parent_id) => {
-                Container::new(self.view_create_task(parent_id))
-                    .width(Length::Fixed(640.0))
-                    .height(Length::FillPortion(4))
-                    .into()
-            }
-        };
-
-        Some(
-            Container::new(
-                Column::new()
-                    .push(Space::with_height(Length::FillPortion(1)))
-                    .push(
-                        Row::new()
-                            .align_items(Alignment::Center)
-                            .push(Space::with_width(Length::Fill))
-                            .push(modal)
-                            .push(Space::with_width(Length::Fill)),
+                Some(
+                    Container::new(
+                        Container::new(self.view_detail(task, true))
+                            .width(Length::Fill)
+                            .height(Length::Fill),
                     )
-                    .push(Space::with_height(Length::FillPortion(1))),
-            )
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .style(modal_backdrop_style)
-            .into(),
-        )
+                    .padding(1)
+                    .width(Length::Fixed(760.0))
+                    .height(Length::Fixed(700.0))
+                    .style(popup_window_style)
+                    .into(),
+                )
+            }
+            super::super::app::SidePanel::Create(parent_id) => Some(
+                Container::new(
+                    Container::new(self.view_create_task(parent_id, true))
+                        .width(Length::Fill)
+                        .height(Length::Fill),
+                )
+                .padding(1)
+                .width(Length::Fixed(760.0))
+                .height(Length::Fixed(700.0))
+                .style(popup_window_style)
+                .into(),
+            ),
+        }
     }
 
     fn view_detail_meta_button<'a>(&self, label: String, message: Message) -> Element<'a, Message> {
@@ -347,12 +373,81 @@ impl Gui {
             _ => "Open or change this setting.",
         };
 
-        self.view_action_button(
+        self.view_action_button(label, 13, Some(message), ButtonSurface::Meta, explanation)
+    }
+
+    fn view_detail_meta_button_fill<'a>(
+        &self,
+        label: String,
+        message: Message,
+    ) -> Element<'a, Message> {
+        let explanation = match label.as_str() {
+            "Apply" => "Apply the selected date and time.",
+            "Clear" => "Clear the selected date field.",
+            _ if label.starts_with("Due:") => "Open the due date picker.",
+            _ if label.starts_with("Completed:") => "Open the completed date picker.",
+            _ if label.contains("Urgency") => "Cycle through urgency values.",
+            _ if label.contains("Importance") => "Cycle through importance values.",
+            _ => "Open or change this setting.",
+        };
+
+        self.view_action_button_with_width(
             label,
             13,
             Some(message),
-            ButtonSurface::Tertiary,
+            ButtonSurface::Meta,
             explanation,
+            Length::FillPortion(1),
+        )
+    }
+
+    fn view_task_name_editor<'a>(&self) -> Element<'a, Message> {
+        Container::new(
+            text_input("Task name", &self.detail_name.text())
+                .on_input(Message::DetailNameChanged)
+                .padding([12, 14])
+                .size(28)
+                .style(dark_text_input_style())
+                .width(Length::Fill),
+        )
+        .width(Length::Fill)
+        .into()
+    }
+
+    fn view_description_editor<'a>(&'a self) -> Element<'a, Message> {
+        let editor = text_editor(&self.detail_description)
+            .on_action(Message::DetailDescriptionAction)
+            .padding([12, 12])
+            .style(detail_text_editor_style());
+
+        let content: Element<'a, Message> = if self.description_needs_internal_scroll() {
+            Scrollable::new(editor.height(Length::Shrink))
+                .style(dark_scrollable_style())
+                .height(Length::Fixed(DESCRIPTION_EDITOR_HEIGHT))
+                .into()
+        } else {
+            editor
+                .height(Length::Fixed(DESCRIPTION_EDITOR_HEIGHT))
+                .into()
+        };
+
+        Container::new(content)
+            .width(Length::Fill)
+            .style(container_input_style)
+            .into()
+    }
+
+    fn description_needs_internal_scroll(&self) -> bool {
+        self.detail_description.line_count() > DESCRIPTION_VISIBLE_LINES
+    }
+
+    fn view_close_button<'a>(&self) -> Element<'a, Message> {
+        self.view_action_button(
+            "X",
+            14,
+            Some(Message::CloseDetail),
+            ButtonSurface::Tertiary,
+            "Close this popup.",
         )
     }
 
@@ -459,34 +554,35 @@ impl Gui {
     }
 
     fn view_tag_picker<'a>(&self) -> Element<'a, Message> {
-        let mut tags_row = Row::new().spacing(8).align_items(Alignment::Center);
+        let mut selected_tag_items = Vec::new();
 
-        for tag in &self.draft_available_tags {
-            tags_row = tags_row.push(self.view_action_button(
-                tag.clone(),
-                13,
-                Some(Message::ToggleTaskTag(tag.clone())),
-                if self.task_has_tag(tag) {
-                    ButtonSurface::Highlight
-                } else {
-                    ButtonSurface::Tag
-                },
-                format!("Toggle the '{tag}' tag on this task."),
+        for tag in &self.draft_tags {
+            selected_tag_items.push((
+                self.view_action_button(
+                    tag.clone(),
+                    13,
+                    Some(Message::ToggleTaskTag(tag.clone())),
+                    ButtonSurface::TagActive,
+                    format!("Remove the '{tag}' tag from this task."),
+                ),
+                Self::estimated_tag_button_width(tag),
             ));
         }
 
-        tags_row = tags_row.push(self.view_action_button(
-            SYMBOL_ADD,
-            16,
-            self.can_add_more_tags().then_some(Message::ToggleTagEditor),
-            ButtonSurface::Tertiary,
-            "Show the tag input and tag list.",
+        selected_tag_items.push((
+            self.view_action_button(
+                SYMBOL_ADD,
+                16,
+                self.can_add_more_tags().then_some(Message::ToggleTagEditor),
+                ButtonSurface::Tertiary,
+                "Show the tag input and tag list.",
+            ),
+            Self::estimated_tag_button_width(SYMBOL_ADD),
         ));
 
         let mut content = Column::new()
             .spacing(10)
-            .push(Text::new("Tags").size(14))
-            .push(tags_row);
+            .push(Self::view_wrapped_button_rows(selected_tag_items));
 
         if self.show_tag_editor {
             content = content.push(
@@ -508,29 +604,95 @@ impl Gui {
                     )),
             );
 
-            if !self.draft_available_tags.is_empty() {
-                let mut existing_tags = Row::new().spacing(8);
-                for tag in &self.draft_available_tags {
-                    existing_tags = existing_tags.push(self.view_action_button(
-                        tag.clone(),
-                        12,
-                        Some(Message::ToggleTaskTag(tag.clone())),
-                        if self.task_has_tag(tag) {
-                            ButtonSurface::Highlight
-                        } else {
-                            ButtonSurface::Tag
-                        },
-                        format!("Toggle the '{tag}' tag on this task."),
+            let common_tags = self.common_tag_suggestions();
+            if !common_tags.is_empty() {
+                let mut existing_tag_items = Vec::new();
+                for tag in common_tags {
+                    existing_tag_items.push((
+                        self.view_action_button(
+                            tag.clone(),
+                            12,
+                            self.can_toggle_tag(&tag)
+                                .then_some(Message::ToggleTaskTag(tag.clone())),
+                            if self.task_has_tag(&tag) {
+                                ButtonSurface::TagActive
+                            } else {
+                                ButtonSurface::Tag
+                            },
+                            format!("Quick add the '{tag}' tag to this task."),
+                        ),
+                        Self::estimated_tag_button_width(&tag),
                     ));
                 }
-                content = content.push(existing_tags);
+                content = content
+                    .push(Text::new("Quick Add").size(12))
+                    .push(Self::view_wrapped_button_rows(existing_tag_items));
             }
         }
 
-        Container::new(content)
-            .padding(12)
-            .width(Length::Fill)
-            .style(container_tertiary_style)
+        Column::new()
+            .spacing(6)
+            .push(Text::new("Tags").size(14))
+            .push(
+                Container::new(content)
+                    .padding(12)
+                    .width(Length::Fill)
+                    .style(container_tertiary_style),
+            )
+            .into()
+    }
+
+    fn detail_timestamp_text(&self, task: &Task) -> String {
+        format!(
+            "Created: {}\nUpdated: {}",
+            crate::gui::theme::format_date(task.times.created_at),
+            crate::gui::theme::format_date(task.times.updated_at)
+        )
+    }
+
+    fn estimated_tag_button_width(tag: &str) -> f32 {
+        TAG_BUTTON_BASE_WIDTH + tag.chars().count() as f32 * TAG_BUTTON_CHAR_WIDTH
+    }
+
+    fn view_wrapped_button_rows<'a>(
+        items: Vec<(Element<'a, Message>, f32)>,
+    ) -> Element<'a, Message> {
+        let mut rows: Vec<Vec<Element<'a, Message>>> = Vec::new();
+        let mut current_row: Vec<Element<'a, Message>> = Vec::new();
+        let mut current_width = 0.0;
+
+        for (item, width) in items {
+            let spacing = if current_row.is_empty() { 0.0 } else { 8.0 };
+
+            if !current_row.is_empty()
+                && (current_width + spacing + width > TAG_ROW_WRAP_WIDTH
+                    || current_row.len() >= TAG_ROW_MAX_ITEMS)
+            {
+                rows.push(current_row);
+                current_row = Vec::new();
+                current_width = 0.0;
+            }
+
+            current_width += if current_row.is_empty() {
+                width
+            } else {
+                spacing + width
+            };
+            current_row.push(item);
+        }
+
+        if !current_row.is_empty() {
+            rows.push(current_row);
+        }
+
+        rows.into_iter()
+            .fold(Column::new().spacing(8), |column, row_items| {
+                let row = row_items.into_iter().fold(
+                    Row::new().spacing(8).align_items(Alignment::Center),
+                    |row, item| row.push(item),
+                );
+                column.push(row)
+            })
             .into()
     }
 }

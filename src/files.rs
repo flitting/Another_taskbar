@@ -89,30 +89,6 @@ pub fn display_all_tasks(manager: &TaskManager) {
     }
 }
 
-/// Clear all tasks from the manager.
-///
-/// This function creates a new, empty TaskManager, effectively clearing
-/// all tasks from the current state. This is useful for resetting the
-/// application state when the user wants to start fresh.
-///
-/// # Returns
-/// A new TaskManager with no tasks (only the empty root task)
-pub fn clear_all_tasks() -> TaskManager {
-    TaskManager::new()
-}
-
-/// Delete the taskbar file from disk.
-///
-/// # Arguments
-/// * `path` - The file path of the taskbar to delete
-///
-/// # Returns
-/// * `Ok(())` on success
-/// * `Err(String)` if file deletion fails
-pub fn delete_taskbar_file<P: AsRef<Path>>(path: P) -> Result<(), String> {
-    std::fs::remove_file(path).map_err(|e| format!("Failed to delete taskbar file: {}", e))
-}
-
 /// Check if a taskbar file exists at the specified path.
 ///
 /// # Arguments
@@ -166,7 +142,7 @@ pub fn count_all_tasks(manager: &TaskManager) -> usize {
         .root
         .subtasks
         .iter()
-        .map(|t| count_recursive(t))
+        .map(count_recursive)
         .sum()
 }
 
@@ -435,23 +411,6 @@ mod tests {
     }
 
     #[test]
-    fn test_clear_all_tasks() {
-        let mut manager = TaskManager::new();
-
-        manager
-            .add_task(0, create_test_task(1, "Task 1", TaskState::Todo, false))
-            .unwrap();
-        manager
-            .add_task(0, create_test_task(2, "Task 2", TaskState::Todo, false))
-            .unwrap();
-
-        assert_eq!(count_all_tasks(&manager), 2);
-
-        let manager = clear_all_tasks();
-        assert_eq!(count_all_tasks(&manager), 0);
-    }
-
-    #[test]
     fn test_display_all_tasks_empty() {
         let manager = TaskManager::new();
         // Should print "No tasks. Use 'add' to create a new task."
@@ -521,21 +480,6 @@ mod tests {
         // Clean up
         fs::remove_file(original_path).unwrap();
         fs::remove_file(backup_path).unwrap();
-    }
-
-    #[test]
-    fn test_delete_taskbar_file() {
-        let path = "test_delete.json";
-
-        // Create the file
-        fs::write(path, "{}").unwrap();
-        assert!(taskbar_file_exists(path));
-
-        // Delete the file
-        assert!(delete_taskbar_file(path).is_ok());
-
-        // Verify it's deleted
-        assert!(!taskbar_file_exists(path));
     }
 
     #[test]

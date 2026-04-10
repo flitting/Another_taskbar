@@ -1,4 +1,4 @@
-use iced::widget::{button, pick_list, text_editor, text_input};
+use iced::widget::{button, pick_list, scrollable, text_editor, text_input};
 use iced::{Background, Border, Color, Vector};
 use std::rc::Rc;
 use std::sync::{OnceLock, RwLock};
@@ -92,13 +92,15 @@ pub fn apply_theme_palette(palette: ThemePalette) {
 pub enum ButtonSurface {
     Highlight,
     Tertiary,
-    Pinned,
-    Menu,
+    Meta,
     Tag,
+    TagActive,
 }
 
 pub const HOVER_OVERLAY: Color = Color::from_rgba(0.95, 0.95, 0.98, 0.10);
 pub const PRESSED_OVERLAY: Color = Color::from_rgba(0.95, 0.95, 0.98, 0.18);
+const POPUP_BORDER_WIDTH: f32 = 1.0;
+const POPUP_RADIUS: f32 = 24.0;
 
 pub fn get_state_color(state: &TaskState) -> Color {
     let palette = current_theme_palette();
@@ -121,14 +123,6 @@ pub fn task_state_icon(state: &TaskState) -> &'static str {
     }
 }
 
-pub fn task_state_button_label(state: &TaskState) -> String {
-    format!(
-        "{} {}",
-        task_state_icon(state),
-        state.to_string().to_lowercase()
-    )
-}
-
 pub fn all_task_states() -> Vec<TaskState> {
     vec![
         TaskState::Todo,
@@ -137,6 +131,68 @@ pub fn all_task_states() -> Vec<TaskState> {
         TaskState::Completed,
         TaskState::Archived,
     ]
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskStateOption {
+    pub state: TaskState,
+    pub label: String,
+}
+
+impl std::fmt::Display for TaskStateOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.label)
+    }
+}
+
+pub fn task_state_option(state: &TaskState) -> TaskStateOption {
+    TaskStateOption {
+        state: state.clone(),
+        label: task_state_label(state),
+    }
+}
+
+pub fn all_task_state_options() -> Vec<TaskStateOption> {
+    all_task_states()
+        .into_iter()
+        .map(|state| task_state_option(&state))
+        .collect()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskStateIconOption {
+    pub state: TaskState,
+    pub label: String,
+}
+
+impl std::fmt::Display for TaskStateIconOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.label)
+    }
+}
+
+pub fn task_state_icon_option(state: &TaskState) -> TaskStateIconOption {
+    TaskStateIconOption {
+        state: state.clone(),
+        label: match state {
+            TaskState::Todo => task_state_icon(state).to_string(),
+            TaskState::InProgress
+            | TaskState::Blocked
+            | TaskState::Completed
+            | TaskState::Archived => format!(" {}", task_state_icon(state)),
+        },
+    }
+}
+
+pub fn all_task_state_icon_options() -> Vec<TaskStateIconOption> {
+    all_task_states()
+        .into_iter()
+        .map(|state| task_state_icon_option(&state))
+        .collect()
+}
+
+pub fn task_state_label(state: &TaskState) -> String {
+    format!("{} {}", task_state_icon(state), state)
 }
 
 pub fn format_date(date: chrono::DateTime<chrono::Utc>) -> String {
@@ -148,6 +204,34 @@ fn container_appearance(background: Color) -> iced::widget::container::Appearanc
     iced::widget::container::Appearance {
         background: Some(Background::Color(background)),
         text_color: Some(palette.text_primary),
+        ..Default::default()
+    }
+}
+
+fn popup_appearance(background: Color) -> iced::widget::container::Appearance {
+    let palette = current_theme_palette();
+    iced::widget::container::Appearance {
+        background: Some(Background::Color(background)),
+        text_color: Some(palette.text_primary),
+        border: Border {
+            radius: POPUP_RADIUS.into(),
+            width: POPUP_BORDER_WIDTH,
+            color: mix_colors(palette.accent_color, palette.menu_bg),
+        },
+        ..Default::default()
+    }
+}
+
+fn popup_inner_appearance(background: Color) -> iced::widget::container::Appearance {
+    let palette = current_theme_palette();
+    iced::widget::container::Appearance {
+        background: Some(Background::Color(background)),
+        text_color: Some(palette.text_primary),
+        border: Border {
+            radius: (POPUP_RADIUS - POPUP_BORDER_WIDTH).max(0.0).into(),
+            width: 0.0,
+            color: Color::TRANSPARENT,
+        },
         ..Default::default()
     }
 }
@@ -164,12 +248,32 @@ pub fn container_tertiary_style(_theme: &iced::Theme) -> iced::widget::container
     container_appearance(current_theme_palette().tertiary_bg)
 }
 
-pub fn container_pinned_style(_theme: &iced::Theme) -> iced::widget::container::Appearance {
-    container_appearance(current_theme_palette().pinned_bg)
+pub fn container_input_style(_theme: &iced::Theme) -> iced::widget::container::Appearance {
+    let palette = current_theme_palette();
+    iced::widget::container::Appearance {
+        background: Some(Background::Color(palette.input_bg)),
+        text_color: Some(palette.text_primary),
+        border: Border {
+            radius: 10.0.into(),
+            width: 1.0,
+            color: mix_colors(palette.input_bg, HOVER_OVERLAY),
+        },
+        ..Default::default()
+    }
 }
 
-pub fn container_menu_style(_theme: &iced::Theme) -> iced::widget::container::Appearance {
-    container_appearance(current_theme_palette().primary_bg)
+pub fn container_pinned_style(_theme: &iced::Theme) -> iced::widget::container::Appearance {
+    let palette = current_theme_palette();
+    iced::widget::container::Appearance {
+        background: Some(Background::Color(palette.pinned_bg)),
+        text_color: Some(palette.text_primary),
+        border: Border {
+            radius: 12.0.into(),
+            width: 1.0,
+            color: palette.highlight_bg,
+        },
+        ..Default::default()
+    }
 }
 
 pub fn container_highlight_style(_theme: &iced::Theme) -> iced::widget::container::Appearance {
@@ -204,9 +308,9 @@ fn surface_color(surface: ButtonSurface) -> Color {
     match surface {
         ButtonSurface::Highlight => palette.highlight_bg,
         ButtonSurface::Tertiary => palette.tertiary_bg,
-        ButtonSurface::Pinned => palette.pinned_bg,
-        ButtonSurface::Menu => palette.menu_bg,
+        ButtonSurface::Meta => palette.menu_bg,
         ButtonSurface::Tag => palette.tag_bg,
+        ButtonSurface::TagActive => palette.tag_active_bg,
     }
 }
 
@@ -220,13 +324,21 @@ impl button::StyleSheet for ActionButtonStyle {
 
     fn active(&self, _style: &Self::Style) -> button::Appearance {
         let palette = current_theme_palette();
+        let border_color = match self.surface {
+            ButtonSurface::Meta => mix_colors(palette.accent_color, palette.menu_bg),
+            _ => Color::TRANSPARENT,
+        };
+        let border_width = match self.surface {
+            ButtonSurface::Meta => 1.0,
+            _ => 0.0,
+        };
         button::Appearance {
             background: Some(Background::Color(surface_color(self.surface))),
             text_color: palette.text_primary,
             border: Border {
                 radius: 8.0.into(),
-                width: 0.0,
-                color: Color::TRANSPARENT,
+                width: border_width,
+                color: border_color,
             },
             shadow_offset: Vector::default(),
             ..Default::default()
@@ -302,7 +414,15 @@ pub fn inline_button_style(text_color: Color) -> iced::theme::Button {
 }
 
 pub fn container_menu_bg_light_style(_theme: &iced::Theme) -> iced::widget::container::Appearance {
-    container_appearance(current_theme_palette().menu_bg)
+    popup_appearance(current_theme_palette().menu_bg)
+}
+
+pub fn popup_window_style(_theme: &iced::Theme) -> iced::widget::container::Appearance {
+    popup_appearance(current_theme_palette().secondary_bg)
+}
+
+pub fn popup_window_inner_style(_theme: &iced::Theme) -> iced::widget::container::Appearance {
+    popup_inner_appearance(current_theme_palette().secondary_bg)
 }
 
 pub fn tooltip_container_style(_theme: &iced::Theme) -> iced::widget::container::Appearance {
@@ -313,7 +433,7 @@ pub fn tooltip_container_style(_theme: &iced::Theme) -> iced::widget::container:
         border: Border {
             radius: 8.0.into(),
             width: 1.0,
-            color: palette.menu_bg,
+            color: palette.text_secondary,
         },
         ..Default::default()
     }
@@ -340,7 +460,7 @@ impl text_input::StyleSheet for DarkTextInputStyle {
 
     fn focused(&self, style: &Self::Style) -> text_input::Appearance {
         let mut appearance = self.active(style);
-        appearance.border.color = current_theme_palette().highlight_bg;
+        appearance.border.color = current_theme_palette().accent_color;
         appearance
     }
 
@@ -402,6 +522,93 @@ pub fn dark_pick_list_style() -> iced::theme::PickList {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub struct CompactDarkPickListStyle;
+
+impl pick_list::StyleSheet for CompactDarkPickListStyle {
+    type Style = iced::Theme;
+
+    fn active(&self, _style: &Self::Style) -> pick_list::Appearance {
+        let palette = current_theme_palette();
+        pick_list::Appearance {
+            text_color: palette.text_primary,
+            placeholder_color: palette.text_muted,
+            handle_color: Color::TRANSPARENT,
+            background: Background::Color(palette.input_bg),
+            border: Border {
+                radius: 8.0.into(),
+                width: 1.0,
+                color: palette.menu_bg,
+            },
+        }
+    }
+
+    fn hovered(&self, style: &Self::Style) -> pick_list::Appearance {
+        let mut appearance = self.active(style);
+        appearance.border.color = current_theme_palette().highlight_bg;
+        appearance
+    }
+}
+
+pub fn compact_dark_pick_list_style() -> iced::theme::PickList {
+    iced::theme::PickList::Custom(Rc::new(CompactDarkPickListStyle), Rc::new(DarkMenuStyle))
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DarkScrollableStyle;
+
+impl scrollable::StyleSheet for DarkScrollableStyle {
+    type Style = iced::Theme;
+
+    fn active(&self, _style: &Self::Style) -> scrollable::Appearance {
+        let palette = current_theme_palette();
+        scrollable::Appearance {
+            container: iced::widget::container::Appearance::default(),
+            scrollbar: scrollable::Scrollbar {
+                background: Some(Background::Color(palette.secondary_bg)),
+                border: Border {
+                    radius: 8.0.into(),
+                    width: 0.0,
+                    color: Color::TRANSPARENT,
+                },
+                scroller: scrollable::Scroller {
+                    color: palette.menu_bg,
+                    border: Border {
+                        radius: 8.0.into(),
+                        width: 0.0,
+                        color: Color::TRANSPARENT,
+                    },
+                },
+            },
+            gap: Some(Background::Color(palette.secondary_bg)),
+        }
+    }
+
+    fn hovered(
+        &self,
+        style: &Self::Style,
+        is_mouse_over_scrollbar: bool,
+    ) -> scrollable::Appearance {
+        let mut appearance = self.active(style);
+        if is_mouse_over_scrollbar {
+            appearance.scrollbar.scroller.color =
+                mix_colors(current_theme_palette().menu_bg, HOVER_OVERLAY);
+        }
+        appearance
+    }
+
+    fn dragging(&self, style: &Self::Style) -> scrollable::Appearance {
+        let mut appearance = self.active(style);
+        appearance.scrollbar.scroller.color =
+            mix_colors(current_theme_palette().menu_bg, PRESSED_OVERLAY);
+        appearance
+    }
+}
+
+pub fn dark_scrollable_style() -> iced::theme::Scrollable {
+    iced::theme::Scrollable::Custom(Box::new(DarkScrollableStyle))
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct DarkMenuStyle;
 
 impl iced::overlay::menu::StyleSheet for DarkMenuStyle {
@@ -420,38 +627,6 @@ impl iced::overlay::menu::StyleSheet for DarkMenuStyle {
             selected_text_color: palette.text_primary,
             selected_background: Background::Color(palette.highlight_bg),
         }
-    }
-}
-
-pub fn container_todo_style(_theme: &iced::Theme) -> iced::widget::container::Appearance {
-    container_appearance(current_theme_palette().todo_color)
-}
-
-pub fn container_inprogress_style(_theme: &iced::Theme) -> iced::widget::container::Appearance {
-    container_appearance(current_theme_palette().in_progress_color)
-}
-
-pub fn container_blocked_style(_theme: &iced::Theme) -> iced::widget::container::Appearance {
-    container_appearance(current_theme_palette().blocked_color)
-}
-
-pub fn container_completed_style(_theme: &iced::Theme) -> iced::widget::container::Appearance {
-    container_appearance(current_theme_palette().completed_color)
-}
-
-pub fn container_archived_style(_theme: &iced::Theme) -> iced::widget::container::Appearance {
-    container_appearance(current_theme_palette().archived_color)
-}
-
-pub fn get_state_style_fn(
-    state: &TaskState,
-) -> fn(&iced::Theme) -> iced::widget::container::Appearance {
-    match state {
-        TaskState::Todo => container_todo_style,
-        TaskState::InProgress => container_inprogress_style,
-        TaskState::Blocked => container_blocked_style,
-        TaskState::Completed => container_completed_style,
-        TaskState::Archived => container_archived_style,
     }
 }
 

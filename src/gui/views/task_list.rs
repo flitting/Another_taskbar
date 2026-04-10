@@ -1,13 +1,16 @@
-use iced::widget::{mouse_area, text_input, Column, Container, Row, Scrollable, Space, Text};
+use iced::widget::{
+    mouse_area, pick_list, text_input, Column, Container, Row, Scrollable, Space, Text,
+};
 use iced::{Alignment, Element, Length};
 
 use crate::gui::theme::{
-    all_task_states, container_menu_bg_light_style, container_pinned_style,
+    all_task_state_icon_options, compact_dark_pick_list_style, container_pinned_style,
     container_secondary_style, container_tertiary_style, current_theme_palette,
-    dark_text_input_style, task_state_icon, ButtonSurface,
+    dark_scrollable_style, dark_text_input_style, get_state_color, task_state_icon_option,
+    ButtonSurface,
 };
 use crate::symbols::{SYMBOL_ADD, SYMBOL_COLLAPSED, SYMBOL_EXPANDED, SYMBOL_PIN, SYMBOL_SETTINGS};
-use crate::tasks::{Task, TaskImportance, TaskUrgency};
+use crate::tasks::{Task, TaskImportance, TaskState, TaskUrgency};
 
 use super::super::app::{Gui, Message};
 
@@ -71,7 +74,7 @@ impl Gui {
                     ))
                     .push(self.view_action_button(
                         SYMBOL_ADD,
-                        20,
+                        14,
                         Some(Message::OpenCreateRoot),
                         ButtonSurface::Highlight,
                         "Create a new top-level task.",
@@ -87,6 +90,7 @@ impl Gui {
         }
 
         let scrollable_content = Scrollable::new(task_column)
+            .style(dark_scrollable_style())
             .height(Length::Fill)
             .width(Length::FillPortion(2));
 
@@ -105,6 +109,9 @@ impl Gui {
         } else {
             container_tertiary_style
         };
+        let is_completed = matches!(task.state, TaskState::Completed);
+        let state_color = get_state_color(&task.state);
+        let task_label = task_name_with_completion_mark(&task.name, &task.state);
 
         let mut task_row = Row::new().spacing(0).align_items(Alignment::Center);
 
@@ -153,23 +160,31 @@ impl Gui {
             task_container_row = task_container_row.push(Space::with_width(Length::Fixed(40.0)));
         }
 
-        let state_icon = task_state_icon(&task.state);
-        task_container_row = task_container_row.push(self.view_plain_button(
-            state_icon,
-            18,
-            Some(Message::ToggleStateMenu(task.id)),
-            palette.text_muted,
-        ));
+        task_container_row = task_container_row.push(
+            Container::new(
+                pick_list(
+                    all_task_state_icon_options(),
+                    Some(task_state_icon_option(&task.state)),
+                    move |selected| Message::SelectState(task.id, selected.state),
+                )
+                .padding([6, 12])
+                .text_size(14)
+                .style(compact_dark_pick_list_style())
+                .width(Length::Fixed(40.0)),
+            )
+            .padding([0, 0, 0, 0])
+            .style(move |_: &iced::Theme| strike_overlay_appearance(is_completed, state_color)),
+        );
 
         task_container_row = task_container_row.push(self.view_plain_button_fill(
-            &task.name,
+            task_label,
             16,
             Some(Message::ToggleDetail(task.id)),
             ButtonSurface::Highlight,
         ));
 
         if self.hovered_task == Some(task.id) {
-            if !matches!(task.importance, None) || !matches!(task.urgency, None) {
+            if task.importance.is_some() || task.urgency.is_some() {
                 task_container_row =
                     task_container_row.push(stripes.push(Space::with_width(Length::Fixed(8.0))));
             }
@@ -189,7 +204,7 @@ impl Gui {
                 Some(Message::OpenCreateChild(task.id)),
                 palette.text_muted,
             ));
-        } else if !matches!(task.importance, None) || !matches!(task.urgency, None) {
+        } else if task.importance.is_some() || task.urgency.is_some() {
             task_container_row =
                 task_container_row.push(stripes.push(Space::with_width(Length::Fixed(8.0))));
         }
@@ -206,26 +221,6 @@ impl Gui {
         task_row = task_row.push(task_row_surface);
 
         let mut container_col = Column::new().spacing(4).push(task_row);
-
-        if self.state_menu_for == Some(task.id) {
-            let mut menu = Column::new().spacing(6).padding(8);
-
-            for s in all_task_states() {
-                let label = format!("{} {}", task_state_icon(&s), s);
-                menu = menu.push(self.view_menu_button(
-                    label,
-                    Message::SelectState(task.id, s.clone()),
-                    format!("Set this task to {}.", s),
-                ));
-            }
-
-            container_col = container_col.push(
-                Container::new(menu)
-                    .padding(8)
-                    .width(Length::Fixed(180.0))
-                    .style(container_menu_bg_light_style),
-            );
-        }
 
         if !task.subtasks.is_empty() && !self.collapsed.contains(&task.id) {
             for sub in task.subtasks.clone() {
@@ -249,5 +244,42 @@ fn stripe_appearance(color: iced::Color) -> iced::widget::container::Appearance 
     iced::widget::container::Appearance {
         background: Some(iced::Background::Color(color)),
         ..Default::default()
+    }
+}
+
+fn task_name_with_completion_mark(name: &str, state: &TaskState) -> String {
+    if matches!(state, TaskState::Completed) {
+        apply_strikethrough(name)
+    } else {
+        name.to_string()
+    }
+}
+
+fn apply_strikethrough(text: &str) -> String {
+    let mut struck = String::with_capacity(text.len() * 2);
+    for ch in text.chars() {
+        struck.push(ch);
+        if !ch.is_whitespace() {
+            struck.push('\u{0336}');
+        }
+    }
+    struck
+}
+
+fn strike_overlay_appearance(
+    completed: bool,
+    color: iced::Color,
+) -> iced::widget::container::Appearance {
+    if completed {
+        iced::widget::container::Appearance {
+            border: iced::Border {
+                width: 0.0,
+                radius: 0.0.into(),
+                color,
+            },
+            ..Default::default()
+        }
+    } else {
+        Default::default()
     }
 }

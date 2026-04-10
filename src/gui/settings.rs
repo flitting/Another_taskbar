@@ -30,7 +30,7 @@ impl Default for GuiSettings {
 }
 
 fn default_show_details_aside() -> bool {
-    true
+    false
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -168,7 +168,7 @@ pub fn load_theme_palette_from_path(
     path: &Path,
     fallback_name: &str,
 ) -> Result<ThemePalette, String> {
-    let content = fs::read_to_string(&path)
+    let content = fs::read_to_string(path)
         .map_err(|error| format!("Failed to read theme '{}': {error}", path.display()))?;
     let file: ThemePaletteFile = toml::from_str(&content)
         .map_err(|error| format!("Failed to parse theme '{}': {error}", path.display()))?;

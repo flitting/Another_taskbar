@@ -223,7 +223,7 @@ pub fn run_cli() {
 
     let completer = CommandCompleter::new();
     let mut editor = Editor::with_config(Default::default()).unwrap();
-    let _completer = editor.set_helper(Some(completer));
+    editor.set_helper(Some(completer));
 
     loop {
         let readline = editor.readline("> ");

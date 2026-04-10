@@ -1,12 +1,6 @@
 use std::env;
 
-mod app;
-mod cli_display;
-mod files;
-mod gui;
-mod input_parse;
-mod symbols;
-mod tasks;
+use another_taskbar::app;
 
 fn main() {
     let args: Vec<String> = env::args().collect();

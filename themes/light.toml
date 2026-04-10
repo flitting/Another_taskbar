@@ -1,25 +1,49 @@
 name = "Light"
-primary_bg = "#F3F4F8"
-secondary_bg = "#E7EAF2"
-tertiary_bg = "#D9DDE8"
-pinned_bg = "#F2DDC2"
-accent_color = "#346BA8"
-highlight_bg = "#6987D9"
-selection_bg = "#93B3E4"
-text_primary = "#171A24"
-text_secondary = "#525968"
-text_muted = "#7B8391"
-menu_bg = "#C7CFDE"
-tooltip_bg = "#FFFFFF"
-tag_bg = "#C8CDD8"
-tag_active_bg = "#8AA2D8"
-input_bg = "#FFFFFF"
-todo_color = "#6482C2"
-in_progress_color = "#C68F2C"
-blocked_color = "#C75F5F"
-completed_color = "#4FA164"
-archived_color = "#7B8391"
-importance_high_stripe = "#D64545"
-importance_low_stripe = "#36A356"
-urgency_high_stripe = "#DE8128"
-urgency_low_stripe = "#54C8F2"
+# Window background behind the task list and side panels.
+primary_bg = "#F2DDC2"
+# Main task list / detail panel surface.
+secondary_bg = "#EBCFAF"
+# Elevated cards like task rows and grouped controls.
+tertiary_bg = "#EBCFAF"
+# Background for pinned task cards.
+pinned_bg = "#fbe0bf"
+# Accent border and focus color.
+accent_color = "#9D5C2F"
+# Highlighted button background.
+highlight_bg = "#f1b285"
+# Selected or active control background.
+selection_bg = "#e0d3c5"
+# Primary text color for titles and body text.
+text_primary = "#2F2115"
+# Secondary text color for supporting labels.
+text_secondary = "#5D4633"
+# Muted text color for low-emphasis icons and copy.
+text_muted = "#876C55"
+# Popup / modal menu background.
+menu_bg = "#D9B38B"
+# Tooltip bubble background.
+tooltip_bg = "#FFF8F0"
+# Inactive tag chip background.
+tag_bg = "#E6C7A5"
+# Active/selected tag chip background.
+tag_active_bg = "#D4A06B"
+# Text input and editor field background.
+input_bg = "#FBF1E4"
+# Todo state icon color.
+todo_color = "#9C6F4A"
+# In-progress state icon color.
+in_progress_color = "#C57F2C"
+# Blocked state icon color.
+blocked_color = "#B85C4A"
+# Completed state icon color and completed-task strike accent.
+completed_color = "#6D8A52"
+# Archived state icon color.
+archived_color = "#8A715C"
+# Stripe color for high-importance tasks.
+importance_high_stripe = "#C65A46"
+# Stripe color for low-importance tasks.
+importance_low_stripe = "#7A9A56"
+# Stripe color for high-urgency tasks.
+urgency_high_stripe = "#D07B2E"
+# Stripe color for low-urgency tasks.
+urgency_low_stripe = "#7FA7B5"

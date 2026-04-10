@@ -10,7 +10,7 @@ impl Task {
         let status_icon = self.get_status_icon();
         let pin_icon = if self.pinned { SYMBOL_PIN } else { " " };
 
-        println!("{} {}", pin_icon, self.format_task_info(&status_icon));
+        println!("{} {}", pin_icon, self.format_task_info(status_icon));
 
         // Display all subtasks with tree structure
         for (index, subtask) in self.subtasks.iter().enumerate() {
@@ -34,7 +34,7 @@ impl Task {
             prefix,
             connector,
             pin_icon,
-            self.format_task_info(&status_icon)
+            self.format_task_info(status_icon)
         );
 
         // Display subtasks with extended prefix

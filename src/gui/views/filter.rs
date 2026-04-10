@@ -2,15 +2,34 @@ use iced::widget::{Column, Container, Row, Space, Text};
 use iced::{Alignment, Element, Length};
 
 use crate::gui::theme::{container_menu_bg_light_style, modal_backdrop_style, ButtonSurface};
+use crate::symbols::SYMBOL_CLOSE;
 use crate::tasks::{ImportanceFilter, PinnedFilter, StateFilter, TaskState, UrgencyFilter};
 
 use super::super::app::{Gui, Message};
+
+const FILTER_TAG_ROW_WRAP_WIDTH: f32 = 380.0;
+const FILTER_TAG_BUTTON_BASE_WIDTH: f32 = 28.0;
+const FILTER_TAG_BUTTON_CHAR_WIDTH: f32 = 8.5;
+const FILTER_TAG_ROW_MAX_ITEMS: usize = 5;
 
 impl Gui {
     pub fn view_filter_modal(&self) -> Element<'_, Message> {
         let mut content = Column::new()
             .spacing(14)
-            .push(Text::new("Filter").size(22))
+            .push(
+                Row::new()
+                    .spacing(8)
+                    .align_items(Alignment::Center)
+                    .push(Text::new("Filter").size(22))
+                    .push(Space::with_width(Length::Fill))
+                    .push(self.view_action_button(
+                        SYMBOL_CLOSE,
+                        14,
+                        Some(Message::CancelFilterSelection),
+                        ButtonSurface::Tertiary,
+                        "Close the filter panel without applying draft changes.",
+                    )),
+            )
             .push(Text::new("Select tags, importance, and urgency to show matching tasks. Parent tasks stay visible if any nested subtask matches.").size(12))
             .push(Text::new("Importance").size(14))
             .push(self.view_importance_filter_row())
@@ -22,23 +41,28 @@ impl Gui {
             .push(self.view_pinned_filter_row())
             .push(Text::new("Tags").size(14));
 
-        let mut tags_row = Row::new().spacing(8).align_items(Alignment::Center);
+        let mut tag_items = Vec::new();
         for tag in &self.manager.available_tags {
             let selected = self.draft_filter_tags.iter().any(|value| value == tag);
-            tags_row = tags_row.push(self.view_action_button(
-                tag.clone(),
-                13,
-                Some(Message::ToggleDraftFilterTag(tag.clone())),
-                if selected {
-                    ButtonSurface::Highlight
-                } else {
-                    ButtonSurface::Tertiary
-                },
-                format!("Toggle the '{tag}' filter."),
+            tag_items.push((
+                self.view_action_button(
+                    tag.clone(),
+                    13,
+                    Some(Message::ToggleDraftFilterTag(tag.clone())),
+                    if selected {
+                        ButtonSurface::Highlight
+                    } else {
+                        ButtonSurface::Tertiary
+                    },
+                    format!("Toggle the '{tag}' filter."),
+                ),
+                Self::estimated_filter_tag_button_width(tag),
             ));
         }
 
-        content = content.push(tags_row).push(
+        content = content
+            .push(Self::view_filter_tag_rows(tag_items))
+            .push(
             Row::new()
                 .spacing(8)
                 .push(self.view_action_button(
@@ -220,5 +244,49 @@ impl Gui {
             },
             tooltip,
         )
+    }
+
+    fn estimated_filter_tag_button_width(tag: &str) -> f32 {
+        FILTER_TAG_BUTTON_BASE_WIDTH + tag.chars().count() as f32 * FILTER_TAG_BUTTON_CHAR_WIDTH
+    }
+
+    fn view_filter_tag_rows<'a>(items: Vec<(Element<'a, Message>, f32)>) -> Element<'a, Message> {
+        let mut rows: Vec<Vec<Element<'a, Message>>> = Vec::new();
+        let mut current_row: Vec<Element<'a, Message>> = Vec::new();
+        let mut current_width = 0.0;
+
+        for (item, width) in items {
+            let spacing = if current_row.is_empty() { 0.0 } else { 8.0 };
+
+            if !current_row.is_empty()
+                && (current_width + spacing + width > FILTER_TAG_ROW_WRAP_WIDTH
+                    || current_row.len() >= FILTER_TAG_ROW_MAX_ITEMS)
+            {
+                rows.push(current_row);
+                current_row = Vec::new();
+                current_width = 0.0;
+            }
+
+            current_width += if current_row.is_empty() {
+                width
+            } else {
+                spacing + width
+            };
+            current_row.push(item);
+        }
+
+        if !current_row.is_empty() {
+            rows.push(current_row);
+        }
+
+        rows.into_iter()
+            .fold(Column::new().spacing(8), |column, row_items| {
+                let row = row_items.into_iter().fold(
+                    Row::new().spacing(8).align_items(Alignment::Center),
+                    |row, item| row.push(item),
+                );
+                column.push(row)
+            })
+            .into()
     }
 }
