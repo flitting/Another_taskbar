@@ -24,9 +24,9 @@ menu_bg = "#414457"
 # Tooltip bubble background.
 tooltip_bg = "#161822"
 # Inactive tag chip background.
-tag_bg = "#3A3C45"
+tag_bg = "#2A2C39"
 # Active/selected tag chip background.
-tag_active_bg = "#666A7E"
+tag_active_bg = "#5D7FC0"
 # Text input and editor field background.
 input_bg = "#1D1F2B"
 # Todo state icon color.

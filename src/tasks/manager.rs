@@ -1,10 +1,13 @@
-use chrono::Utc;
+use chrono::{Datelike, Duration, NaiveDate, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::{
     filters::{ImportanceFilter, PinnedFilter, StateFilter, UrgencyFilter},
-    model::{Task, TaskDraft, TaskState},
+    model::{
+        RecurrenceEnd, RecurrenceFrequency, RecurrenceSetting, RecurrenceUnit, Task, TaskDraft,
+        TaskSortMode, TaskState,
+    },
 };
 
 #[derive(Clone)]
@@ -14,7 +17,7 @@ struct TaskManagerSnapshot {
     available_tags: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct TaskManager {
     pub root: Task,
     #[serde(default)]
@@ -37,6 +40,132 @@ pub struct TaskManager {
 }
 
 impl TaskManager {
+    fn last_day_of_month(year: i32, month: u32) -> u32 {
+        let next = if month == 12 {
+            NaiveDate::from_ymd_opt(year + 1, 1, 1)
+        } else {
+            NaiveDate::from_ymd_opt(year, month + 1, 1)
+        };
+        next.and_then(|date| date.pred_opt())
+            .map(|date| date.day())
+            .unwrap_or(28)
+    }
+
+    fn add_months_keep_day(date: chrono::DateTime<Utc>, months: i32) -> chrono::DateTime<Utc> {
+        let naive = date.naive_utc();
+        let mut year = naive.year();
+        let mut month = naive.month() as i32 + months;
+        while month > 12 {
+            month -= 12;
+            year += 1;
+        }
+        while month < 1 {
+            month += 12;
+            year -= 1;
+        }
+        let month_u = month as u32;
+        let day = naive.day().min(Self::last_day_of_month(year, month_u));
+        let fallback = date;
+        let maybe = NaiveDate::from_ymd_opt(year, month_u, day).and_then(|d| {
+            d.and_hms_opt(naive.hour(), naive.minute(), naive.second())
+        });
+        maybe
+            .map(|ndt| chrono::DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc))
+            .unwrap_or(fallback)
+    }
+
+    fn apply_due_clock(
+        due: chrono::DateTime<Utc>,
+        recurrence: &RecurrenceSetting,
+    ) -> chrono::DateTime<Utc> {
+        due.with_hour(u32::from(recurrence.due_hour))
+            .and_then(|value| value.with_minute(u32::from(recurrence.due_minute)))
+            .and_then(|value| value.with_second(0))
+            .and_then(|value| value.with_nanosecond(0))
+            .unwrap_or(due)
+    }
+
+    fn next_recurrence_due(
+        due: chrono::DateTime<Utc>,
+        recurrence: &RecurrenceSetting,
+    ) -> chrono::DateTime<Utc> {
+        let advanced = match recurrence.frequency {
+            RecurrenceFrequency::DoesNotRepeat => due,
+            RecurrenceFrequency::Daily => due + Duration::days(1),
+            RecurrenceFrequency::Weekly => due + Duration::weeks(1),
+            RecurrenceFrequency::Biweekly => due + Duration::weeks(2),
+            RecurrenceFrequency::Monthly => Self::add_months_keep_day(due, 1),
+            RecurrenceFrequency::Yearly => Self::add_months_keep_day(due, 12),
+            RecurrenceFrequency::Custom => {
+                if let Some(custom) = &recurrence.custom {
+                    let every = custom.every.max(1) as i32;
+                    match custom.unit {
+                        RecurrenceUnit::Day => due + Duration::days(i64::from(every)),
+                        RecurrenceUnit::Week => due + Duration::weeks(i64::from(every)),
+                        RecurrenceUnit::Month => Self::add_months_keep_day(due, every),
+                        RecurrenceUnit::Year => Self::add_months_keep_day(due, every * 12),
+                    }
+                } else {
+                    due
+                }
+            }
+        };
+        Self::apply_due_clock(advanced, recurrence)
+    }
+
+    fn recurrence_end_reached(
+        recurrence: &RecurrenceSetting,
+        next_due: chrono::DateTime<Utc>,
+    ) -> bool {
+        match recurrence.frequency {
+            RecurrenceFrequency::DoesNotRepeat => true,
+            RecurrenceFrequency::Custom => {
+                if let Some(custom) = &recurrence.custom {
+                    match custom.end {
+                        RecurrenceEnd::Never => false,
+                        RecurrenceEnd::OnDate(limit) => next_due > limit,
+                        RecurrenceEnd::AfterOccurrences(max_n) => recurrence.occurrences_done >= max_n,
+                    }
+                } else {
+                    true
+                }
+            }
+            _ => false,
+        }
+    }
+
+    fn apply_recurrence_to_task(task: &mut Task, now: chrono::DateTime<Utc>) {
+        if let (Some(recurrence), Some(mut due)) = (&mut task.recurrence, task.times.due_date) {
+            if recurrence.frequency != RecurrenceFrequency::DoesNotRepeat {
+                let original_due = due;
+                while due <= now {
+                    let next_due = Self::next_recurrence_due(due, recurrence);
+                    if next_due <= due || Self::recurrence_end_reached(recurrence, next_due) {
+                        break;
+                    }
+                    due = next_due;
+                    recurrence.occurrences_done = recurrence.occurrences_done.saturating_add(1);
+                }
+                if due != original_due {
+                    task.times.due_date = Some(due);
+                    if task.state != TaskState::Blocked {
+                        task.state = TaskState::Todo;
+                    }
+                    task.times.updated_at = now;
+                }
+            }
+        }
+
+        for child in &mut task.subtasks {
+            Self::apply_recurrence_to_task(child, now);
+        }
+    }
+
+    pub fn apply_recurring_updates(&mut self) {
+        let now = Utc::now();
+        Self::apply_recurrence_to_task(&mut self.root, now);
+    }
+
     pub fn new() -> Self {
         let mut manager = TaskManager {
             root: Task::empty_task(0),
@@ -100,11 +229,144 @@ impl TaskManager {
         }
     }
 
-    fn resort_all_subtasks(task: &mut Task) {
-        task.sort_subtasks();
+    fn resort_all_subtasks(task: &mut Task, mode: &TaskSortMode) {
+        task.sort_subtasks_with_mode(mode);
         for subtask in &mut task.subtasks {
-            Self::resort_all_subtasks(subtask);
+            Self::resort_all_subtasks(subtask, mode);
         }
+    }
+
+    pub fn sort_for_mode(&mut self, mode: &TaskSortMode) {
+        Self::resort_all_subtasks(&mut self.root, mode);
+    }
+
+    fn find_task_ref(task: &Task, id: u32) -> Option<&Task> {
+        if task.id == id {
+            return Some(task);
+        }
+        for child in &task.subtasks {
+            if let Some(found) = Self::find_task_ref(child, id) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    fn remove_task_from_tree(task: &mut Task, id: u32) -> Option<Task> {
+        if let Some(index) = task.subtasks.iter().position(|item| item.id == id) {
+            return Some(task.subtasks.remove(index));
+        }
+        for child in &mut task.subtasks {
+            if let Some(found) = Self::remove_task_from_tree(child, id) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    fn update_layer_recursive(task: &mut Task, layer: u32) {
+        task.layer = layer;
+        for child in &mut task.subtasks {
+            Self::update_layer_recursive(child, layer + 1);
+        }
+    }
+
+    fn resequence_custom_order(parent: &mut Task) {
+        for (index, item) in parent.subtasks.iter_mut().enumerate() {
+            item.custom_order = index as i64;
+        }
+    }
+
+    fn move_to_parent_index(
+        &mut self,
+        task_id: u32,
+        parent_id: u32,
+        target_index: Option<usize>,
+    ) -> Result<(), String> {
+        if task_id == 0 || task_id == parent_id {
+            return Err("Invalid move target".to_string());
+        }
+        let moving_ref = Self::find_task_ref(&self.root, task_id)
+            .ok_or_else(|| "Task not found".to_string())?;
+        if Self::find_task_ref(moving_ref, parent_id).is_some() {
+            return Err("Cannot move a task into its own descendant".to_string());
+        }
+        if self.root.search_by_id_ref(parent_id).is_none() {
+            return Err("Parent task not found".to_string());
+        }
+
+        self.remember_state();
+        let moving =
+            Self::remove_task_from_tree(&mut self.root, task_id).ok_or_else(|| "Task not found".to_string())?;
+        let parent = self
+            .root
+            .search_by_id(parent_id)
+            .ok_or_else(|| "Parent task not found".to_string())?;
+
+        let idx = target_index.unwrap_or(parent.subtasks.len()).min(parent.subtasks.len());
+        parent.subtasks.insert(idx, moving);
+        Self::resequence_custom_order(parent);
+        for child in &mut parent.subtasks {
+            Self::update_layer_recursive(child, parent.layer + 1);
+        }
+        Ok(())
+    }
+
+    pub fn move_task_before(&mut self, task_id: u32, sibling_id: u32) -> Result<(), String> {
+        if sibling_id == 0 {
+            return self.move_to_parent_index(task_id, 0, Some(0));
+        }
+        let parent_id = self.find_parent_id(sibling_id).ok_or_else(|| "Sibling task not found".to_string())?;
+        let parent = self
+            .root
+            .search_by_id_ref(parent_id)
+            .ok_or_else(|| "Parent task not found".to_string())?;
+        let index = parent
+            .subtasks
+            .iter()
+            .position(|item| item.id == sibling_id)
+            .ok_or_else(|| "Sibling task not found".to_string())?;
+        self.move_to_parent_index(task_id, parent_id, Some(index))
+    }
+
+    pub fn move_task_after(&mut self, task_id: u32, sibling_id: u32) -> Result<(), String> {
+        if sibling_id == 0 {
+            return self.move_to_parent_index(task_id, 0, None);
+        }
+        let parent_id = self.find_parent_id(sibling_id).ok_or_else(|| "Sibling task not found".to_string())?;
+        let parent = self
+            .root
+            .search_by_id_ref(parent_id)
+            .ok_or_else(|| "Parent task not found".to_string())?;
+        let index = parent
+            .subtasks
+            .iter()
+            .position(|item| item.id == sibling_id)
+            .ok_or_else(|| "Sibling task not found".to_string())?;
+        self.move_to_parent_index(task_id, parent_id, Some(index + 1))
+    }
+
+    pub fn move_task_as_subtask(&mut self, task_id: u32, parent_id: u32) -> Result<(), String> {
+        self.move_to_parent_index(task_id, parent_id, None)
+    }
+
+    fn find_parent_id_from(task: &Task, id: u32) -> Option<u32> {
+        for child in &task.subtasks {
+            if child.id == id {
+                return Some(task.id);
+            }
+            if let Some(found) = Self::find_parent_id_from(child, id) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    pub fn find_parent_id(&self, id: u32) -> Option<u32> {
+        if id == 0 {
+            return None;
+        }
+        Self::find_parent_id_from(&self.root, id)
     }
 
     fn remember_state(&mut self) {
@@ -288,6 +550,16 @@ impl TaskManager {
     }
 
     pub fn update_task_from_draft(&mut self, id: u32, draft: TaskDraft) -> Result<(), String> {
+        self.update_task_from_draft_with_options(id, draft, false, false)
+    }
+
+    pub fn update_task_from_draft_with_options(
+        &mut self,
+        id: u32,
+        draft: TaskDraft,
+        cascade_descendants: bool,
+        auto_complete_parent_tasks: bool,
+    ) -> Result<(), String> {
         if self.root.search_by_id_ref(id).is_none() {
             return Err("Task not found".to_string());
         }
@@ -297,22 +569,51 @@ impl TaskManager {
             .search_by_id(id)
             .ok_or_else(|| "Task not found".to_string())?;
 
+        let state = draft.state.clone();
         task.apply_draft(draft);
-        Self::resort_all_subtasks(&mut self.root);
+        if cascade_descendants {
+            let now = Utc::now();
+            for child in &mut task.subtasks {
+                Self::set_state_recursive(child, &state, now);
+            }
+        }
+        if auto_complete_parent_tasks {
+            self.apply_parent_completion_rollups();
+        }
+        Self::resort_all_subtasks(&mut self.root, &TaskSortMode::UpdateFirst);
         Ok(())
     }
 
     pub fn set_task_state(&mut self, id: u32, state: TaskState) -> Result<(), String> {
+        self.set_task_state_with_options(id, state, false, false)
+    }
+
+    pub fn set_task_state_with_options(
+        &mut self,
+        id: u32,
+        state: TaskState,
+        cascade_descendants: bool,
+        auto_complete_parent_tasks: bool,
+    ) -> Result<(), String> {
         if self.root.search_by_id_ref(id).is_none() {
             return Err("Task not found".to_string());
         }
         self.remember_state();
+        let now = Utc::now();
         let task = self
             .root
             .search_by_id(id)
             .ok_or_else(|| "Task not found".to_string())?;
-        task.state = state;
-        task.times.updated_at = Utc::now();
+        task.state = state.clone();
+        task.times.updated_at = now;
+        if cascade_descendants {
+            for child in &mut task.subtasks {
+                Self::set_state_recursive(child, &state, now);
+            }
+        }
+        if auto_complete_parent_tasks {
+            self.apply_parent_completion_rollups();
+        }
         Ok(())
     }
 
@@ -322,7 +623,7 @@ impl TaskManager {
         }
         self.remember_state();
         if self.root.toggle_pinned(id) {
-            Self::resort_all_subtasks(&mut self.root);
+            Self::resort_all_subtasks(&mut self.root, &TaskSortMode::UpdateFirst);
             Ok(())
         } else {
             Err("Task not found".to_string())
@@ -371,7 +672,7 @@ impl TaskManager {
                     .search_by_id(id)
                     .ok_or_else(|| "Task not found".to_string())?;
                 task.apply_draft(draft);
-                Self::resort_all_subtasks(&mut self.root);
+                Self::resort_all_subtasks(&mut self.root, &TaskSortMode::UpdateFirst);
                 Ok(None)
             }
             None => {
@@ -385,6 +686,41 @@ impl TaskManager {
                 Ok(Some(self.uni_id))
             }
         }
+    }
+
+    fn set_state_recursive(task: &mut Task, state: &TaskState, now: chrono::DateTime<Utc>) {
+        task.state = state.clone();
+        task.times.updated_at = now;
+        for child in &mut task.subtasks {
+            Self::set_state_recursive(child, state, now);
+        }
+    }
+
+    fn apply_parent_completion_rollups_recursive(
+        task: &mut Task,
+        now: chrono::DateTime<Utc>,
+    ) -> bool {
+        for child in &mut task.subtasks {
+            Self::apply_parent_completion_rollups_recursive(child, now);
+        }
+
+        if !task.subtasks.is_empty()
+            && task
+                .subtasks
+                .iter()
+                .all(|child| matches!(child.state, TaskState::Completed))
+            && task.state != TaskState::Completed
+        {
+            task.state = TaskState::Completed;
+            task.times.updated_at = now;
+        }
+
+        matches!(task.state, TaskState::Completed)
+    }
+
+    pub fn apply_parent_completion_rollups(&mut self) {
+        let now = Utc::now();
+        Self::apply_parent_completion_rollups_recursive(&mut self.root, now);
     }
 }
 
@@ -424,6 +760,7 @@ mod tests {
                     pinned: false,
                     due_date: None,
                     completed_at: None,
+                    recurrence: None,
                 },
             )
             .unwrap();
@@ -449,6 +786,7 @@ mod tests {
                     pinned: false,
                     due_date: None,
                     completed_at: None,
+                    recurrence: None,
                 },
             )
             .unwrap();

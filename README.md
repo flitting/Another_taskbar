@@ -3,7 +3,9 @@
 `another_taskbar` is a Rust task manager with two interfaces built on the same task data:
 
 - A CLI for quick entry, scripting, and batch changes
-- A desktop GUI built with `iced` for browsing, editing, filtering, and theming
+- A desktop GUI built with `tauri` for browsing and editing tasks
+
+The project is being refactored so the task logic stays reusable across desktop, CLI, and a future Android client.
 
 Tasks are stored in JSON as a nested tree with support for subtasks, state tracking, urgency, importance, tags, pinning, and timestamps.
 
@@ -18,6 +20,8 @@ Tasks are stored in JSON as a nested tree with support for subtasks, state track
 - Undo for the last saved task change
 - JSON save/load support
 - Theme files loaded from `themes/*.toml`
+- Shared runtime/bootstrap for both CLI and GUI
+- Recurring tasks
 
 ## Build
 
@@ -28,10 +32,9 @@ cargo build --release
 
 ## Run
 
-GUI mode is the default:
+CLI mode:
 
 ```bash
-
 another_taskbar --cli
 ```
 
@@ -90,20 +93,16 @@ another_taskbar --gui
 
 The GUI includes:
 
-- Task tree browsing with expand/collapse
-- Detail and create popups for editing tasks
-- Inline editing for task name, description, state, dates, tags, urgency, importance, and pin status
-- Search across task names and descriptions
-- Filters for tags, urgency, importance, state, and pinned status
-- Theme switching from built-in or custom TOML theme files
-- Save As / Load file actions from the settings popup
-- Docked detail panels or floating popup windows
+- Task tree browsing (nested subtasks)
+- Add, delete, pin/unpin, and complete actions
 - Undo for the most recent saved change
+- Sort selection directly in the main toolbar
+- Theme switching from built-in or custom TOML theme files
 
 GUI-related files:
 
-- `src/gui/` for app state, views, theming, and settings
-- `settings.toml` for GUI preferences
+- `src/gui/` for Tauri backend commands and GUI settings
+- `ui/` for the webview frontend
 - `themes/light.toml` and `themes/dark.toml` for bundled themes
 
 ## Data Files
@@ -119,14 +118,23 @@ Task data is serialized as a `TaskManager` tree rooted at an internal node with 
 ```text
 src/
   app/          CLI and GUI entry points
-  gui/          GUI state, views, theming, and settings
+  app/runtime.rs
+  gui/          Tauri backend and GUI settings
   input_parse/  CLI command parsing and prompt helpers
   tasks/        Task model, filtering, and manager logic
   files.rs      JSON persistence and task statistics helpers
   cli_display.rs
   lib.rs
   main.rs
+ui/             Tauri webview frontend
+tests/          Integration tests for shared behavior
 ```
+
+## Notes
+
+- The desktop UI now uses bundled frontend font assets instead of exposing font selection in settings.
+- Sort mode lives in the main toolbar, while settings are focused on theme, language, and task font size.
+- Architecture notes for Android preparation live in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Check
 

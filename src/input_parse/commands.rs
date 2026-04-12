@@ -6,10 +6,9 @@ use crate::files::{
     save_taskbar, taskbar_file_exists,
 };
 use crate::gui::settings::{
-    apply_saved_theme, available_font_names, available_symbol_font_names, import_theme_file,
-    load_gui_settings, load_theme_palette, normalize_font_name, normalize_symbol_font_name,
-    save_gui_settings,
+    apply_saved_theme, import_theme_file, load_gui_settings, load_theme_palette, save_gui_settings,
 };
+use crate::locale::AppLanguage;
 use crate::tasks::*;
 
 use super::prompts::{
@@ -160,11 +159,10 @@ Examples:
         "setting" => println!(
             "help setting
   setting theme THEME_PATH
-  setting font FONT_NAME
-  setting symbol_font FONT_NAME
-  setting show_details_aside true|false
+  setting language en|zh-CN
+  setting task_sort custom|task_name|create_first|update_first|complete_first
 
-  Updates persisted GUI settings. Boolean settings use true or false."
+  Updates persisted GUI settings."
         ),
         "filter" => println!(
             "help filter
@@ -260,6 +258,7 @@ fn add_task(args: &[String], manager: &mut TaskManager, current_path: &Path) {
         pinned,
         due_date: None,
         completed_at: None,
+        recurrence: None,
     };
 
     match manager.create_task_from_draft(father_id, draft) {
@@ -360,6 +359,7 @@ fn add_task_automated(args: &[String], manager: &mut TaskManager, current_path: 
         pinned,
         due_date: None,
         completed_at: None,
+        recurrence: None,
     };
 
     match manager.create_task_from_draft(parent_id, draft) {
@@ -728,83 +728,42 @@ fn setting_command(args: &[String]) {
         return;
     }
 
-    if eq_ci(setting_name, "show_details_aside") {
-        let value = match setting_value.to_ascii_lowercase().as_str() {
-            "true" => true,
-            "false" => false,
-            _ => {
-                println!(
-                    "Invalid value for show_details_aside: {}. Use true or false.",
-                    setting_value
-                );
-                return;
-            }
+    if eq_ci(setting_name, "language") {
+        let Some(language) = AppLanguage::from_code(setting_value) else {
+            println!("Unknown language '{}'. Supported languages: en, zh-CN.", setting_value);
+            return;
         };
 
         let mut settings = load_gui_settings();
-        settings.show_details_aside = value;
+        settings.selected_language = language;
         match save_gui_settings(&settings) {
-            Ok(()) => println!("show_details_aside set to {}.", value),
+            Ok(()) => println!("Language set to '{}'.", language.native_name()),
             Err(error) => println!("{error}"),
         }
         return;
     }
 
-    if eq_ci(setting_name, "font") {
-        let supported_fonts = available_font_names();
-        let normalized = normalize_font_name(setting_value);
-
-        if !supported_fonts
-            .iter()
-            .any(|font_name| font_name == &normalized)
-        {
+    if eq_ci(setting_name, "task_sort") {
+        let normalized = setting_value.to_ascii_lowercase();
+        let Some(sort_mode) = TaskSortMode::from_code(&normalized) else {
             println!(
-                "Unknown font '{}'. Supported fonts: {}.",
-                setting_value,
-                supported_fonts.join(", ")
+                "Unknown task_sort '{}'. Supported values: custom, task_name, create_first, update_first, complete_first.",
+                setting_value
             );
             return;
-        }
+        };
 
         let mut settings = load_gui_settings();
-        settings.selected_font = normalized.clone();
+        settings.task_sort_mode = sort_mode.clone();
         match save_gui_settings(&settings) {
-            Ok(()) => println!(
-                "Font set to '{}'. Restart the GUI to apply it everywhere.",
-                normalized
-            ),
-            Err(error) => println!("{error}"),
-        }
-        return;
-    }
-
-    if eq_ci(setting_name, "symbol_font") {
-        let supported_fonts = available_symbol_font_names();
-        let normalized = normalize_symbol_font_name(setting_value);
-
-        if !supported_fonts
-            .iter()
-            .any(|font_name| font_name == &normalized)
-        {
-            println!(
-                "Unknown symbol font '{}'. Supported symbol fonts: {}.",
-                setting_value,
-                supported_fonts.join(", ")
-            );
-            return;
-        }
-
-        let mut settings = load_gui_settings();
-        settings.selected_symbol_font = normalized.clone();
-        match save_gui_settings(&settings) {
-            Ok(()) => println!("Symbol font set to '{}'.", normalized),
+            Ok(()) => println!("Task sort set to '{}'.", sort_mode.code()),
             Err(error) => println!("{error}"),
         }
         return;
     }
 
     println!(
-        "Unknown setting '{}'. Supported settings: theme, font, symbol_font, show_details_aside.",
+        "Unknown setting '{}'. Supported settings: theme, language, task_sort.",
         setting_name
     );
 }

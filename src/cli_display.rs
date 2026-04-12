@@ -152,6 +152,8 @@ mod tests {
             subtasks: Vec::new(),
             times,
             layer,
+            custom_order: 0,
+            recurrence: None,
         }
     }
 

@@ -1,6 +1,4 @@
-pub mod app;
 pub mod settings;
-pub mod theme;
-pub mod views;
+mod tauri_app;
 
-pub use app::run_gui_app;
+pub use tauri_app::run_gui_app;

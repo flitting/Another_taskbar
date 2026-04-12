@@ -10,9 +10,9 @@ pinned_bg = "#fbe0bf"
 # Accent border and focus color.
 accent_color = "#9D5C2F"
 # Highlighted button background.
-highlight_bg = "#f1b285"
+highlight_bg = "#f7bd92"
 # Selected or active control background.
-selection_bg = "#e0d3c5"
+selection_bg = "#c88d61"
 # Primary text color for titles and body text.
 text_primary = "#2F2115"
 # Secondary text color for supporting labels.
@@ -24,9 +24,9 @@ menu_bg = "#D9B38B"
 # Tooltip bubble background.
 tooltip_bg = "#FFF8F0"
 # Inactive tag chip background.
-tag_bg = "#E6C7A5"
+tag_bg = "#f7eddc"
 # Active/selected tag chip background.
-tag_active_bg = "#D4A06B"
+tag_active_bg = "#d79c70"
 # Text input and editor field background.
 input_bg = "#FBF1E4"
 # Todo state icon color.

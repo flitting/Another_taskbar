@@ -27,6 +27,48 @@ pub enum TaskImportance {
     High,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub enum TaskSortMode {
+    Custom,
+    TaskName,
+    CreateFirst,
+    UpdateFirst,
+    CompleteFirst,
+}
+
+impl TaskSortMode {
+    pub fn all() -> [Self; 5] {
+        [
+            Self::Custom,
+            Self::TaskName,
+            Self::CreateFirst,
+            Self::UpdateFirst,
+            Self::CompleteFirst,
+        ]
+    }
+
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Custom => "custom",
+            Self::TaskName => "task_name",
+            Self::CreateFirst => "create_first",
+            Self::UpdateFirst => "update_first",
+            Self::CompleteFirst => "complete_first",
+        }
+    }
+
+    pub fn from_code(value: &str) -> Option<Self> {
+        match value {
+            "custom" => Some(Self::Custom),
+            "task_name" | "name" => Some(Self::TaskName),
+            "create_first" | "created" => Some(Self::CreateFirst),
+            "update_first" | "updated" => Some(Self::UpdateFirst),
+            "complete_first" | "completed" => Some(Self::CompleteFirst),
+            _ => None,
+        }
+    }
+}
+
 impl std::fmt::Display for TaskState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let label = match self {
@@ -71,6 +113,48 @@ pub struct TaskTimes {
     pub completed_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub enum RecurrenceFrequency {
+    DoesNotRepeat,
+    Daily,
+    Weekly,
+    Biweekly,
+    Monthly,
+    Yearly,
+    Custom,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub enum RecurrenceUnit {
+    Day,
+    Week,
+    Month,
+    Year,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub enum RecurrenceEnd {
+    Never,
+    OnDate(DateTime<Utc>),
+    AfterOccurrences(u32),
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct CustomRecurrence {
+    pub every: u32,
+    pub unit: RecurrenceUnit,
+    pub end: RecurrenceEnd,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct RecurrenceSetting {
+    pub frequency: RecurrenceFrequency,
+    pub due_hour: u8,
+    pub due_minute: u8,
+    pub custom: Option<CustomRecurrence>,
+    pub occurrences_done: u32,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Task {
     pub id: u32,
@@ -84,9 +168,13 @@ pub struct Task {
     pub subtasks: Vec<Task>,
     pub times: TaskTimes,
     pub layer: u32,
+    #[serde(default)]
+    pub custom_order: i64,
+    #[serde(default)]
+    pub recurrence: Option<RecurrenceSetting>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TaskDraft {
     pub name: String,
     pub description: String,
@@ -97,9 +185,19 @@ pub struct TaskDraft {
     pub pinned: bool,
     pub due_date: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
+    pub recurrence: Option<RecurrenceSetting>,
 }
 
 impl Task {
+    fn next_custom_order(children: &[Task]) -> i64 {
+        children
+            .iter()
+            .map(|item| item.custom_order)
+            .max()
+            .unwrap_or(-1)
+            .saturating_add(1)
+    }
+
     fn normalize_task_tags(tags: Vec<String>) -> Vec<String> {
         let mut normalized = Vec::new();
 
@@ -136,28 +234,65 @@ impl Task {
             pinned: false,
             times,
             layer: 0,
+            custom_order: 0,
+            recurrence: None,
         }
     }
 
     pub fn add_subtask(&mut self, mut subtask: Task) {
         subtask.layer = self.layer + 1;
+        subtask.custom_order = Self::next_custom_order(&self.subtasks);
         self.subtasks.push(subtask);
         self.sort_subtasks();
     }
 
+    fn cmp_old_like(a: &Task, b: &Task) -> std::cmp::Ordering {
+        if a.pinned && !b.pinned {
+            std::cmp::Ordering::Less
+        } else if !a.pinned && b.pinned {
+            std::cmp::Ordering::Greater
+        } else {
+            match (a.times.due_date, b.times.due_date) {
+                (Some(a_due), Some(b_due)) => a_due.cmp(&b_due),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => a.times.updated_at.cmp(&b.times.updated_at),
+            }
+        }
+    }
+
     pub fn sort_subtasks(&mut self) {
+        self.sort_subtasks_with_mode(&TaskSortMode::UpdateFirst);
+    }
+
+    pub fn sort_subtasks_with_mode(&mut self, mode: &TaskSortMode) {
         self.subtasks.sort_by(|a, b| {
-            if a.pinned && !b.pinned {
-                std::cmp::Ordering::Less
-            } else if !a.pinned && b.pinned {
-                std::cmp::Ordering::Greater
-            } else {
-                match (a.times.due_date, b.times.due_date) {
-                    (Some(a_due), Some(b_due)) => a_due.cmp(&b_due),
+            match mode {
+                TaskSortMode::Custom => a
+                    .custom_order
+                    .cmp(&b.custom_order)
+                    .then_with(|| Self::cmp_old_like(a, b)),
+                TaskSortMode::TaskName => a
+                    .name
+                    .to_lowercase()
+                    .cmp(&b.name.to_lowercase())
+                    .then_with(|| Self::cmp_old_like(a, b)),
+                TaskSortMode::CreateFirst => a
+                    .times
+                    .created_at
+                    .cmp(&b.times.created_at)
+                    .then_with(|| Self::cmp_old_like(a, b)),
+                TaskSortMode::UpdateFirst => a
+                    .times
+                    .updated_at
+                    .cmp(&b.times.updated_at)
+                    .then_with(|| Self::cmp_old_like(a, b)),
+                TaskSortMode::CompleteFirst => match (a.times.completed_at, b.times.completed_at) {
+                    (Some(a_at), Some(b_at)) => a_at.cmp(&b_at).then_with(|| Self::cmp_old_like(a, b)),
                     (Some(_), None) => std::cmp::Ordering::Less,
                     (None, Some(_)) => std::cmp::Ordering::Greater,
-                    (None, None) => a.times.updated_at.cmp(&b.times.updated_at),
-                }
+                    (None, None) => Self::cmp_old_like(a, b),
+                },
             }
         });
     }
@@ -234,6 +369,7 @@ impl Task {
         self.pinned = draft.pinned;
         self.times.due_date = draft.due_date;
         self.times.completed_at = draft.completed_at;
+        self.recurrence = draft.recurrence;
         self.times.updated_at = Utc::now();
     }
 
@@ -369,6 +505,8 @@ impl TaskDraft {
                 completed_at: self.completed_at,
             },
             layer: 0,
+            custom_order: 0,
+            recurrence: self.recurrence,
         }
     }
 }
@@ -385,6 +523,7 @@ impl From<&Task> for TaskDraft {
             pinned: task.pinned,
             due_date: task.times.due_date,
             completed_at: task.times.completed_at,
+            recurrence: task.recurrence.clone(),
         }
     }
 }

@@ -32,6 +32,14 @@ impl AppLanguage {
         vec![Self::English, Self::ChineseSimplified]
     }
 
+    pub fn from_code(code: &str) -> Option<Self> {
+        match code {
+            "en" | "EN" => Some(Self::English),
+            "zh-CN" | "zh-cn" | "zh_CN" => Some(Self::ChineseSimplified),
+            _ => None,
+        }
+    }
+
     pub fn native_name(self) -> &'static str {
         match self {
             Self::English => "English",
@@ -103,6 +111,14 @@ pub fn text_for(language: AppLanguage, key: &str) -> String {
                 .cloned()
         })
         .unwrap_or_else(|| key.to_string())
+}
+
+pub fn all_strings_for(language: AppLanguage) -> HashMap<String, String> {
+    locale_map()
+        .get(&language)
+        .cloned()
+        .or_else(|| locale_map().get(&AppLanguage::English).cloned())
+        .unwrap_or_default()
 }
 
 pub fn text_with_args(key: &str, args: &[(&str, String)]) -> String {

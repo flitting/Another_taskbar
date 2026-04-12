@@ -1,13 +1,12 @@
-use crate::files::{load_taskbar, save_taskbar, TaskbarDefaultPath, DEFAULT_TASKBAR_FILE_NAME};
+use crate::app::runtime::initialize_runtime;
+use crate::files::save_taskbar;
 use crate::input_parse::{parse_input, CliAction};
-use crate::tasks::TaskManager;
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
 use rustyline::{Context, Editor, Helper};
-use std::path::PathBuf;
 
 /// Custom completer for command auto-completion
 struct CommandCompleter {
@@ -65,14 +64,7 @@ impl CommandCompleter {
     }
 
     fn setting_keywords() -> Vec<&'static str> {
-        vec![
-            "theme",
-            "font",
-            "symbol_font",
-            "show_details_aside",
-            "true",
-            "false",
-        ]
+        vec!["theme", "language", "task_sort"]
     }
 }
 
@@ -190,24 +182,15 @@ impl Helper for CommandCompleter {}
 
 /// Run the interactive taskbar application loop in CLI mode.
 pub fn run_cli() {
-    if let Err(error) = crate::bootstrap::initialize_app_storage() {
-        eprintln!("Failed to initialize app storage: {error}");
-        return;
-    }
-
-    let mut path =
-        TaskbarDefaultPath::resolve().unwrap_or_else(|_| PathBuf::from(DEFAULT_TASKBAR_FILE_NAME));
-
-    let mut manager = match load_taskbar(path.as_path()) {
-        Ok(m) => {
-            println!("Loaded taskbar from {}", path.display());
-            m
-        }
-        Err(_) => {
-            println!("Starting with a new taskbar.");
-            TaskManager::new()
+    let runtime = match initialize_runtime() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            eprintln!("Failed to initialize app storage: {error}");
+            return;
         }
     };
+    let mut path = runtime.taskbar_path;
+    let mut manager = runtime.manager;
 
     let completer = CommandCompleter::new();
     let mut editor = Editor::with_config(Default::default()).unwrap();

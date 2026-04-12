@@ -1,82 +1,92 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use iced::{Color, Font};
 use serde::{Deserialize, Serialize};
 
 use crate::app_paths;
-
-use super::theme::{apply_theme_palette, ThemePalette};
+use crate::locale::AppLanguage;
+use crate::tasks::{TaskSortMode, TaskState};
 
 const DEFAULT_THEME_NAME: &str = "dark";
 const LIGHT_THEME_NAME: &str = "light";
-pub const DEFAULT_FONT_NAME: &str = "Noto Sans";
-pub const DEFAULT_SYMBOL_FONT_NAME: &str = "Noto Sans Symbols 2";
+pub const DEFAULT_TASK_FONT_SIZE: u16 = 14;
+pub const DEFAULT_LANGUAGE: AppLanguage = AppLanguage::English;
 
 const DARK_THEME_TOML: &str = include_str!("../../themes/dark.toml");
 const LIGHT_THEME_TOML: &str = include_str!("../../themes/light.toml");
-pub const JETBRAINS_MONO_FONT_BYTES: &[u8] =
-    include_bytes!("../../fonts/JetBrainsMono-VariableFont_wght.ttf");
-pub const NOTO_SANS_FONT_BYTES: &[u8] =
-    include_bytes!("../../fonts/NotoSans-VariableFont_wdth,wght.ttf");
-pub const NOTO_SANS_SYMBOLS_2_FONT_BYTES: &[u8] =
-    include_bytes!("../../fonts/NotoSansSymbols2-Regular.ttf");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GuiSettings {
     pub selected_theme: String,
-    #[serde(default = "default_font_name")]
-    pub selected_font: String,
-    #[serde(default = "default_symbol_font_name")]
-    pub selected_symbol_font: String,
-    #[serde(default = "default_show_details_aside")]
-    pub show_details_aside: bool,
+    #[serde(default = "default_task_font_size")]
+    pub task_font_size: u16,
+    #[serde(default = "default_language")]
+    pub selected_language: AppLanguage,
+    #[serde(default = "default_task_sort_mode")]
+    pub task_sort_mode: TaskSortMode,
+    #[serde(default)]
+    pub enabled_optional_states: Vec<TaskState>,
+    #[serde(default = "default_auto_complete_parent_tasks")]
+    pub auto_complete_parent_tasks: bool,
 }
 
 impl Default for GuiSettings {
     fn default() -> Self {
         Self {
             selected_theme: DEFAULT_THEME_NAME.to_string(),
-            selected_font: default_font_name(),
-            selected_symbol_font: default_symbol_font_name(),
-            show_details_aside: default_show_details_aside(),
+            task_font_size: default_task_font_size(),
+            selected_language: default_language(),
+            task_sort_mode: default_task_sort_mode(),
+            enabled_optional_states: Vec::new(),
+            auto_complete_parent_tasks: default_auto_complete_parent_tasks(),
         }
     }
 }
 
-fn default_font_name() -> String {
-    DEFAULT_FONT_NAME.to_string()
+fn default_task_font_size() -> u16 {
+    DEFAULT_TASK_FONT_SIZE
 }
 
-fn default_symbol_font_name() -> String {
-    DEFAULT_SYMBOL_FONT_NAME.to_string()
+fn default_language() -> AppLanguage {
+    DEFAULT_LANGUAGE
 }
 
-fn default_show_details_aside() -> bool {
-    false
+fn default_task_sort_mode() -> TaskSortMode {
+    TaskSortMode::Custom
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct FontOption {
-    pub name: &'static str,
-    pub font: Font,
-    pub bytes: &'static [u8],
-    pub file_name: &'static str,
+fn default_auto_complete_parent_tasks() -> bool {
+    true
 }
 
-const FONT_OPTIONS: [FontOption; 1] = [FontOption {
-    name: DEFAULT_FONT_NAME,
-    font: Font::with_name(DEFAULT_FONT_NAME),
-    bytes: NOTO_SANS_FONT_BYTES,
-    file_name: "NotoSans-VariableFont_wdth,wght.ttf",
-}];
-
-const SYMBOL_FONT_OPTIONS: [FontOption; 1] = [FontOption {
-    name: DEFAULT_SYMBOL_FONT_NAME,
-    font: Font::with_name(DEFAULT_SYMBOL_FONT_NAME),
-    bytes: NOTO_SANS_SYMBOLS_2_FONT_BYTES,
-    file_name: "NotoSansSymbols2-Regular.ttf",
-}];
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThemePalette {
+    pub name: String,
+    pub primary_bg: String,
+    pub secondary_bg: String,
+    pub tertiary_bg: String,
+    pub pinned_bg: String,
+    pub accent_color: String,
+    pub highlight_bg: String,
+    pub selection_bg: String,
+    pub text_primary: String,
+    pub text_secondary: String,
+    pub text_muted: String,
+    pub menu_bg: String,
+    pub tooltip_bg: String,
+    pub tag_bg: String,
+    pub tag_active_bg: String,
+    pub input_bg: String,
+    pub todo_color: String,
+    pub in_progress_color: String,
+    pub blocked_color: String,
+    pub completed_color: String,
+    pub archived_color: String,
+    pub importance_high_stripe: String,
+    pub importance_low_stripe: String,
+    pub urgency_high_stripe: String,
+    pub urgency_low_stripe: String,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 struct ThemePaletteFile {
@@ -111,30 +121,30 @@ impl ThemePaletteFile {
     fn into_palette(self, fallback_name: &str) -> Result<ThemePalette, String> {
         Ok(ThemePalette {
             name: self.name.unwrap_or_else(|| fallback_name.to_string()),
-            primary_bg: parse_hex_color(&self.primary_bg)?,
-            secondary_bg: parse_hex_color(&self.secondary_bg)?,
-            tertiary_bg: parse_hex_color(&self.tertiary_bg)?,
-            pinned_bg: parse_hex_color(&self.pinned_bg)?,
-            accent_color: parse_hex_color(&self.accent_color)?,
-            highlight_bg: parse_hex_color(&self.highlight_bg)?,
-            selection_bg: parse_hex_color(&self.selection_bg)?,
-            text_primary: parse_hex_color(&self.text_primary)?,
-            text_secondary: parse_hex_color(&self.text_secondary)?,
-            text_muted: parse_hex_color(&self.text_muted)?,
-            menu_bg: parse_hex_color(&self.menu_bg)?,
-            tooltip_bg: parse_hex_color(&self.tooltip_bg)?,
-            tag_bg: parse_hex_color(&self.tag_bg)?,
-            tag_active_bg: parse_hex_color(&self.tag_active_bg)?,
-            input_bg: parse_hex_color(&self.input_bg)?,
-            todo_color: parse_hex_color(&self.todo_color)?,
-            in_progress_color: parse_hex_color(&self.in_progress_color)?,
-            blocked_color: parse_hex_color(&self.blocked_color)?,
-            completed_color: parse_hex_color(&self.completed_color)?,
-            archived_color: parse_hex_color(&self.archived_color)?,
-            importance_high_stripe: parse_hex_color(&self.importance_high_stripe)?,
-            importance_low_stripe: parse_hex_color(&self.importance_low_stripe)?,
-            urgency_high_stripe: parse_hex_color(&self.urgency_high_stripe)?,
-            urgency_low_stripe: parse_hex_color(&self.urgency_low_stripe)?,
+            primary_bg: normalize_hex_color(&self.primary_bg)?,
+            secondary_bg: normalize_hex_color(&self.secondary_bg)?,
+            tertiary_bg: normalize_hex_color(&self.tertiary_bg)?,
+            pinned_bg: normalize_hex_color(&self.pinned_bg)?,
+            accent_color: normalize_hex_color(&self.accent_color)?,
+            highlight_bg: normalize_hex_color(&self.highlight_bg)?,
+            selection_bg: normalize_hex_color(&self.selection_bg)?,
+            text_primary: normalize_hex_color(&self.text_primary)?,
+            text_secondary: normalize_hex_color(&self.text_secondary)?,
+            text_muted: normalize_hex_color(&self.text_muted)?,
+            menu_bg: normalize_hex_color(&self.menu_bg)?,
+            tooltip_bg: normalize_hex_color(&self.tooltip_bg)?,
+            tag_bg: normalize_hex_color(&self.tag_bg)?,
+            tag_active_bg: normalize_hex_color(&self.tag_active_bg)?,
+            input_bg: normalize_hex_color(&self.input_bg)?,
+            todo_color: normalize_hex_color(&self.todo_color)?,
+            in_progress_color: normalize_hex_color(&self.in_progress_color)?,
+            blocked_color: normalize_hex_color(&self.blocked_color)?,
+            completed_color: normalize_hex_color(&self.completed_color)?,
+            archived_color: normalize_hex_color(&self.archived_color)?,
+            importance_high_stripe: normalize_hex_color(&self.importance_high_stripe)?,
+            importance_low_stripe: normalize_hex_color(&self.importance_low_stripe)?,
+            urgency_high_stripe: normalize_hex_color(&self.urgency_high_stripe)?,
+            urgency_low_stripe: normalize_hex_color(&self.urgency_low_stripe)?,
         })
     }
 }
@@ -142,7 +152,6 @@ impl ThemePaletteFile {
 pub fn initialize_theme_files() -> Result<(), String> {
     fs::create_dir_all(custom_themes_dir()?)
         .map_err(|error| format!("Failed to create themes dir: {error}"))?;
-
     Ok(())
 }
 
@@ -153,7 +162,11 @@ pub fn load_gui_settings() -> GuiSettings {
     };
 
     match fs::read_to_string(&path) {
-        Ok(content) => toml::from_str(&content).unwrap_or_default(),
+        Ok(content) => {
+            let mut settings = toml::from_str::<GuiSettings>(&content).unwrap_or_default();
+            normalize_gui_settings(&mut settings);
+            settings
+        }
         Err(_) => {
             let settings = GuiSettings::default();
             let _ = save_gui_settings(&settings);
@@ -163,7 +176,10 @@ pub fn load_gui_settings() -> GuiSettings {
 }
 
 pub fn save_gui_settings(settings: &GuiSettings) -> Result<(), String> {
-    let content = toml::to_string_pretty(settings)
+    let mut normalized = settings.clone();
+    normalize_gui_settings(&mut normalized);
+
+    let content = toml::to_string_pretty(&normalized)
         .map_err(|error| format!("Failed to serialize settings: {error}"))?;
     let path = gui_settings_path()?;
     if let Some(parent) = path.parent() {
@@ -171,6 +187,28 @@ pub fn save_gui_settings(settings: &GuiSettings) -> Result<(), String> {
             .map_err(|error| format!("Failed to create config dir: {error}"))?;
     }
     fs::write(path, content).map_err(|error| format!("Failed to save settings: {error}"))
+}
+
+fn normalize_gui_settings(settings: &mut GuiSettings) {
+    settings.task_font_size = settings.task_font_size.clamp(11, 28);
+    settings.enabled_optional_states = normalize_optional_states(settings.enabled_optional_states.clone());
+}
+
+fn normalize_optional_states(states: Vec<TaskState>) -> Vec<TaskState> {
+    let mut normalized = Vec::new();
+    for state in states {
+        if !matches!(
+            state,
+            TaskState::InProgress | TaskState::Blocked | TaskState::Archived
+        ) {
+            continue;
+        }
+        if normalized.iter().any(|existing| existing == &state) {
+            continue;
+        }
+        normalized.push(state);
+    }
+    normalized
 }
 
 pub fn available_theme_names() -> Result<Vec<String>, String> {
@@ -200,99 +238,6 @@ pub fn available_theme_names() -> Result<Vec<String>, String> {
     }
 
     Ok(names)
-}
-
-pub fn available_font_names() -> Vec<String> {
-    FONT_OPTIONS
-        .iter()
-        .map(|option| option.name.to_string())
-        .collect()
-}
-
-pub fn available_symbol_font_names() -> Vec<String> {
-    SYMBOL_FONT_OPTIONS
-        .iter()
-        .map(|option| option.name.to_string())
-        .collect()
-}
-
-pub fn default_font() -> Font {
-    font_option(DEFAULT_FONT_NAME)
-        .map(|option| option.font)
-        .unwrap_or(Font::DEFAULT)
-}
-
-pub fn default_symbol_font() -> Font {
-    symbol_font_option(DEFAULT_SYMBOL_FONT_NAME)
-        .map(|option| option.font)
-        .unwrap_or(Font::DEFAULT)
-}
-
-pub fn bundled_font_bytes() -> Vec<std::borrow::Cow<'static, [u8]>> {
-    FONT_OPTIONS
-        .iter()
-        .chain(SYMBOL_FONT_OPTIONS.iter())
-        .map(|option| std::borrow::Cow::Borrowed(option.bytes))
-        .collect()
-}
-
-pub fn font_option(name: &str) -> Option<FontOption> {
-    FONT_OPTIONS
-        .iter()
-        .copied()
-        .find(|option| option.name == name)
-}
-
-pub fn symbol_font_option(name: &str) -> Option<FontOption> {
-    SYMBOL_FONT_OPTIONS
-        .iter()
-        .copied()
-        .find(|option| option.name == name)
-}
-
-pub fn normalize_font_name(name: &str) -> String {
-    font_option(name)
-        .map(|option| option.name.to_string())
-        .unwrap_or_else(|| DEFAULT_FONT_NAME.to_string())
-}
-
-pub fn normalize_symbol_font_name(name: &str) -> String {
-    symbol_font_option(name)
-        .map(|option| option.name.to_string())
-        .unwrap_or_else(|| DEFAULT_SYMBOL_FONT_NAME.to_string())
-}
-
-pub fn font_file_path(name: &str) -> PathBuf {
-    let file_name = font_option(name)
-        .map(|option| option.file_name)
-        .unwrap_or(FONT_OPTIONS[0].file_name);
-    Path::new("[embedded fonts]").join(file_name)
-}
-
-pub fn symbol_font_file_path(name: &str) -> PathBuf {
-    let file_name = symbol_font_option(name)
-        .map(|option| option.file_name)
-        .unwrap_or(SYMBOL_FONT_OPTIONS[0].file_name);
-    Path::new("[embedded fonts]").join(file_name)
-}
-
-pub fn fallback_text_font() -> Font {
-    Font::with_name("Noto Sans")
-}
-
-pub fn bundled_text_fallback_font_bytes() -> &'static [u8] {
-    NOTO_SANS_FONT_BYTES
-}
-
-pub fn bundled_font_bytes_with_fallback() -> Vec<std::borrow::Cow<'static, [u8]>> {
-    FONT_OPTIONS
-        .iter()
-        .chain(SYMBOL_FONT_OPTIONS.iter())
-        .map(|option| std::borrow::Cow::Borrowed(option.bytes))
-        .chain(std::iter::once(std::borrow::Cow::Borrowed(
-            bundled_text_fallback_font_bytes(),
-        )))
-        .collect()
 }
 
 pub fn load_theme_palette(theme_name: &str) -> Result<ThemePalette, String> {
@@ -354,10 +299,7 @@ pub fn import_theme_file(path: &Path) -> Result<String, String> {
 
 pub fn apply_saved_theme() -> Result<ThemePalette, String> {
     let settings = load_gui_settings();
-    let palette = load_theme_palette(&settings.selected_theme)
-        .or_else(|_| load_theme_palette(DEFAULT_THEME_NAME))?;
-    apply_theme_palette(palette.clone());
-    Ok(palette)
+    load_theme_palette(&settings.selected_theme).or_else(|_| load_theme_palette(DEFAULT_THEME_NAME))
 }
 
 pub fn theme_path(theme_name: &str) -> Result<PathBuf, String> {
@@ -372,20 +314,15 @@ pub fn gui_settings_path() -> Result<PathBuf, String> {
     app_paths::gui_settings_path()
 }
 
-fn parse_hex_color(input: &str) -> Result<Color, String> {
+fn normalize_hex_color(input: &str) -> Result<String, String> {
     let trimmed = input.trim();
     let hex = trimmed.strip_prefix('#').unwrap_or(trimmed);
 
-    if hex.len() != 6 {
-        return Err(format!("Invalid color '{input}': expected 6 hex digits"));
+    if hex.len() != 6 || !hex.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return Err(format!(
+            "Invalid color '{input}': expected 6 hex digits (example: #AABBCC)"
+        ));
     }
 
-    let red = u8::from_str_radix(&hex[0..2], 16)
-        .map_err(|_| format!("Invalid red channel in color '{input}'"))?;
-    let green = u8::from_str_radix(&hex[2..4], 16)
-        .map_err(|_| format!("Invalid green channel in color '{input}'"))?;
-    let blue = u8::from_str_radix(&hex[4..6], 16)
-        .map_err(|_| format!("Invalid blue channel in color '{input}'"))?;
-
-    Ok(Color::from_rgb8(red, green, blue))
+    Ok(format!("#{}", hex.to_ascii_uppercase()))
 }

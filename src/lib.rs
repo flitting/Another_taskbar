@@ -5,5 +5,6 @@ pub mod cli_display;
 pub mod files;
 pub mod gui;
 pub mod input_parse;
+pub mod locale;
 pub mod symbols;
 pub mod tasks;
