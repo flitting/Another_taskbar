@@ -442,42 +442,110 @@ fn delete_all_data_and_exit(app_handle: AppHandle) -> Result<(), String> {
             return Err("Default data directory path is empty.".to_string());
         }
 
+        #[cfg(target_os = "linux")]
+        {
+            use std::fs::OpenOptions;
+            use std::os::unix::process::CommandExt;
+            use std::process::Stdio;
+
+            let parent_pid = std::process::id();
+            let quoted_path = shell_quote_posix(&path_str);
+
+            let command = format!(
+                "while kill -0 {parent_pid} 2>/dev/null; do sleep 0.2; done; \
+                 sleep 0.8; \
+                 i=0; \
+                 while [ $i -lt 20 ]; do \
+                   if [ ! -e {quoted_path} ]; then exit 0; fi; \
+                   rm -rf -- {quoted_path}; \
+                   if [ ! -e {quoted_path} ]; then exit 0; fi; \
+                   i=$((i+1)); \
+                   sleep 0.5; \
+                 done; \
+                 exit 1"
+            );
+
+            let devnull_in = OpenOptions::new()
+                .read(true)
+                .open("/dev/null")
+                .map_err(|e| format!("Failed to open /dev/null for stdin: {e}"))?;
+            let devnull_out = OpenOptions::new()
+                .write(true)
+                .open("/dev/null")
+                .map_err(|e| format!("Failed to open /dev/null for stdout: {e}"))?;
+            let devnull_err = OpenOptions::new()
+                .write(true)
+                .open("/dev/null")
+                .map_err(|e| format!("Failed to open /dev/null for stderr: {e}"))?;
+
+            let mut cmd = Command::new("sh");
+            cmd.args(["-c", &command])
+                .stdin(Stdio::from(devnull_in))
+                .stdout(Stdio::from(devnull_out))
+                .stderr(Stdio::from(devnull_err));
+
+            unsafe {
+                cmd.pre_exec(|| {
+                    libc::setsid();
+                    Ok(())
+                });
+            }
+
+            cmd.spawn()
+                .map_err(|error| format!("Failed to schedule cleanup: {error}"))?;
+        }
+
         #[cfg(target_os = "windows")]
         {
+            use std::os::windows::process::CommandExt;
+
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            const DETACHED_PROCESS: u32 = 0x00000008;
+            const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
+
             let quoted_path = shell_quote_powershell(&path_str);
             let parent_pid = std::process::id();
+
             let command = format!(
                 "$pidToWait={parent_pid}; \
                  while (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 300 }}; \
+                 Start-Sleep -Milliseconds 800; \
                  $target='{quoted_path}'; \
-                 if (Test-Path -LiteralPath $target) {{ \
-                   Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue; \
+                 for ($i=0; $i -lt 20; $i++) {{ \
+                     if (-not (Test-Path -LiteralPath $target)) {{ exit 0 }}; \
+                     Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue; \
+                     if (-not (Test-Path -LiteralPath $target)) {{ exit 0 }}; \
+                     Start-Sleep -Milliseconds 500; \
                  }}; \
-                 if (Test-Path -LiteralPath $target) {{ \
-                   Write-Output \"[cleanup] failed: $target\"; \
-                 }} else {{ \
-                   Write-Output \"[cleanup] removed: $target\"; \
-                 }}"
+                 exit 1"
             );
+
             Command::new("powershell")
-                .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &command])
+                .args([
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-WindowStyle",
+                    "Hidden",
+                    "-Command",
+                    &command,
+                ])
+                .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
                 .spawn()
                 .map_err(|error| format!("Failed to schedule Windows cleanup: {error}"))?;
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
         {
             let parent_pid = std::process::id();
             let quoted_path = shell_quote_posix(&path_str);
             let command = format!(
                 "while kill -0 {parent_pid} 2>/dev/null; do sleep 0.2; done; \
-                 rm -rf -- {quoted_path}; \
-                 if [ -e {quoted_path} ]; then \
-                   echo \"[cleanup] failed: {path_str}\"; \
-                 else \
-                   echo \"[cleanup] removed: {path_str}\"; \
-                 fi"
+                 sleep 0.8; \
+                 rm -rf -- {quoted_path}"
             );
+
             Command::new("sh")
                 .args(["-c", &command])
                 .spawn()
@@ -488,19 +556,10 @@ fn delete_all_data_and_exit(app_handle: AppHandle) -> Result<(), String> {
     }
 
     let default_dir = crate::app_paths::data_dir()?;
-    println!(
-        "[cleanup] scheduled after exit for default dir: {}",
-        default_dir.display()
-    );
-    if let Err(error) = schedule_delete_after_exit(default_dir.as_path()) {
-        println!("[cleanup] scheduling failed: {error}");
-        return Err(error);
-    }
-
+    schedule_delete_after_exit(default_dir.as_path())?;
     app_handle.exit(0);
     Ok(())
 }
-
 #[tauri::command]
 fn reload_taskbar_file(state: State<'_, SharedState>) -> Result<(), String> {
     let path = current_taskbar_path(&state)?;

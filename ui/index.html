@@ -1,337 +1,583 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Task Manager</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <main class="board">
-      <header class="toolbar">
-        <h1 id="title-tasks">Tasks</h1>
-        <div class="toolbar-actions">
-          <div class="search-wrap">
-            <input id="search-input" type="text" placeholder="Search tasks" spellcheck="false" autocomplete="off" />
-            <button id="search-clear-btn" class="search-clear-btn" type="button">✕</button>
-          </div>
-          <div id="toolbar-sort" class="select-list toolbar-sort"></div>
-          <button id="settings-btn" title="Settings">⚙</button>
-          <button id="filter-btn">Filter</button>
-          <button id="undo-btn">Undo</button>
-          <button id="new-task-btn" class="primary" title="New Task">+</button>
-        </div>
-      </header>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Task Manager</title>
+        <link rel="stylesheet" href="styles.css" />
+    </head>
+    <body>
+        <main class="board">
+            <header class="toolbar">
+                <h1 id="title-tasks">Tasks</h1>
+                <div class="toolbar-actions">
+                    <div class="search-wrap">
+                        <input
+                            id="search-input"
+                            type="text"
+                            placeholder="Search tasks"
+                            spellcheck="false"
+                            autocomplete="off"
+                        />
+                        <button
+                            id="search-clear-btn"
+                            class="search-clear-btn"
+                            type="button"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    <div
+                        id="toolbar-sort"
+                        class="select-list toolbar-sort"
+                    ></div>
+                    <button id="settings-btn" title="Settings">⚙</button>
+                    <button id="filter-btn">Filter</button>
+                    <button id="undo-btn">Undo</button>
+                    <button id="new-task-btn" class="primary" title="New Task">
+                        +
+                    </button>
+                </div>
+            </header>
 
-      <div id="error-box" class="error-box" style="display: none">
-        <span id="error-text"></span>
-        <button id="error-close-btn" type="button">✕</button>
-      </div>
-
-      <section id="task-board" class="task-board">
-        <div id="drag-zones" class="drag-zones" style="display: none">
-          <button id="drag-delete-zone" type="button" class="drag-zone danger">Delete</button>
-          <button id="drag-cancel-zone" type="button" class="drag-zone">Cancel Drag</button>
-        </div>
-        <ul id="task-list" class="task-list"></ul>
-      </section>
-    </main>
-
-    <dialog id="task-modal" class="modal task-modal">
-      <div class="modal-head">
-        <h2 id="task-modal-title"></h2>
-        <button id="task-modal-close">✕</button>
-      </div>
-
-      <div class="modal-body">
-        <label id="task-name-label">
-          Name
-            <input id="task-form-name" type="text" placeholder="Task name" spellcheck="false" autocomplete="off" />
-        </label>
-
-        <div class="choice-field state-line">
-          <span id="state-label">State</span>
-          <div id="task-form-state" class="segmented">
-            <button type="button" data-value="Todo">○ Todo</button>
-            <button type="button" data-value="InProgress">◐ InProgress</button>
-            <button type="button" data-value="Blocked">⚠ Blocked</button>
-            <button type="button" data-value="Completed">✓ Completed</button>
-            <button type="button" data-value="Archived">⇧ Archived</button>
-          </div>
-        </div>
-        <div class="row row-meta">
-          <div class="choice-field">
-            <span id="urgency-label">Urgency</span>
-            <div id="task-form-urgency" class="segmented compact">
-              <button type="button" data-value="">None</button>
-              <button type="button" data-value="High">High</button>
-              <button type="button" data-value="Low">Low</button>
+            <div id="error-box" class="error-box" style="display: none">
+                <span id="error-text"></span>
+                <button id="error-close-btn" type="button">✕</button>
             </div>
-          </div>
-          <div class="choice-field">
-            <span id="importance-label">Importance</span>
-            <div id="task-form-importance" class="segmented compact">
-              <button type="button" data-value="">None</button>
-              <button type="button" data-value="High">High</button>
-              <button type="button" data-value="Low">Low</button>
+
+            <section id="task-board" class="task-board">
+                <div id="drag-zones" class="drag-zones" style="display: none">
+                    <button
+                        id="drag-delete-zone"
+                        type="button"
+                        class="drag-zone danger"
+                    >
+                        Delete
+                    </button>
+                    <button
+                        id="drag-cancel-zone"
+                        type="button"
+                        class="drag-zone"
+                    >
+                        Cancel Drag
+                    </button>
+                </div>
+                <ul id="task-list" class="task-list"></ul>
+            </section>
+        </main>
+
+        <dialog id="task-modal" class="modal task-modal">
+            <div class="modal-head">
+                <h2 id="task-modal-title"></h2>
+                <button id="task-modal-close">✕</button>
             </div>
-          </div>
-          <div class="choice-field">
-            <span id="pinned-label">Pinned</span>
-            <button id="task-form-pinned" type="button" class="pin-toggle">☆ Unpinned</button>
-          </div>
-        </div>
 
-        <label id="description-label">
-          Description
-          <textarea id="task-form-description" rows="5" spellcheck="false"></textarea>
-        </label>
+            <div class="modal-body">
+                <label id="task-name-label">
+                    Name
+                    <input
+                        id="task-form-name"
+                        type="text"
+                        placeholder="Task name"
+                        spellcheck="false"
+                        autocomplete="off"
+                    />
+                </label>
 
-        <div class="row two-col">
-          <label id="due-label">
-            Due
-            <input id="task-form-due" type="hidden" />
-            <div class="datetime-control">
-              <button id="task-form-due-open" type="button" class="time-display empty">No time selected</button>
-              <button id="task-form-due-clear" type="button" class="tiny-btn">✕</button>
+                <div class="choice-field state-line">
+                    <span id="state-label">State</span>
+                    <div id="task-form-state" class="segmented">
+                        <button type="button" data-value="Todo">○ Todo</button>
+                        <button type="button" data-value="InProgress">
+                            ◐ InProgress
+                        </button>
+                        <button type="button" data-value="Blocked">
+                            ⚠ Blocked
+                        </button>
+                        <button type="button" data-value="Completed">
+                            ✓ Completed
+                        </button>
+                        <button type="button" data-value="Archived">
+                            ⇧ Archived
+                        </button>
+                    </div>
+                </div>
+                <div class="row row-meta">
+                    <div class="choice-field">
+                        <span id="urgency-label">Urgency</span>
+                        <div id="task-form-urgency" class="segmented compact">
+                            <button type="button" data-value="">None</button>
+                            <button type="button" data-value="High">
+                                High
+                            </button>
+                            <button type="button" data-value="Low">Low</button>
+                        </div>
+                    </div>
+                    <div class="choice-field">
+                        <span id="importance-label">Importance</span>
+                        <div
+                            id="task-form-importance"
+                            class="segmented compact"
+                        >
+                            <button type="button" data-value="">None</button>
+                            <button type="button" data-value="High">
+                                High
+                            </button>
+                            <button type="button" data-value="Low">Low</button>
+                        </div>
+                    </div>
+                    <div class="choice-field">
+                        <span id="pinned-label">Pinned</span>
+                        <button
+                            id="task-form-pinned"
+                            type="button"
+                            class="pin-toggle"
+                        >
+                            ☆ Unpinned
+                        </button>
+                    </div>
+                </div>
+
+                <label id="description-label">
+                    Description
+                    <textarea
+                        id="task-form-description"
+                        rows="5"
+                        spellcheck="false"
+                    ></textarea>
+                </label>
+
+                <div class="row two-col">
+                    <label id="due-label">
+                        Due
+                        <input id="task-form-due" type="hidden" />
+                        <div class="datetime-control">
+                            <button
+                                id="task-form-due-open"
+                                type="button"
+                                class="time-display empty"
+                            >
+                                No time selected
+                            </button>
+                            <button
+                                id="task-form-due-clear"
+                                type="button"
+                                class="tiny-btn"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    </label>
+                    <label id="completed-label">
+                        Completed
+                        <input id="task-form-completed" type="hidden" />
+                        <div class="datetime-control">
+                            <button
+                                id="task-form-completed-open"
+                                type="button"
+                                class="time-display empty"
+                            >
+                                No time selected
+                            </button>
+                            <button
+                                id="task-form-completed-clear"
+                                type="button"
+                                class="tiny-btn"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    </label>
+                </div>
+
+                <div class="choice-field recurrence-line">
+                    <span id="recurring-label">Recurring</span>
+                    <button
+                        id="task-form-recurring-toggle"
+                        type="button"
+                        class="pin-toggle"
+                    >
+                        Does not repeat
+                    </button>
+                </div>
+
+                <div
+                    id="task-form-recurring-row"
+                    class="row two-col"
+                    style="display: none"
+                >
+                    <label id="recurring-repeat-label">
+                        Repeat
+                        <div
+                            id="task-form-recurring-frequency"
+                            class="select-list"
+                        ></div>
+                    </label>
+                    <label id="recurring-due-time-label">
+                        Due time
+                        <div class="recurring-time-row">
+                            <div
+                                id="task-form-recurring-hour"
+                                class="select-list"
+                            ></div>
+                            <div
+                                id="task-form-recurring-minute"
+                                class="select-list"
+                            ></div>
+                            <button
+                                id="task-form-recurring-custom-btn"
+                                type="button"
+                            >
+                                Custom
+                            </button>
+                        </div>
+                    </label>
+                </div>
+
+                <div>
+                    <p id="tags-label" class="muted">Tags</p>
+                    <div id="task-form-tags-list" class="chip-row"></div>
+                    <div class="tag-input-row">
+                        <input
+                            id="task-form-tag-input"
+                            type="text"
+                            placeholder="Add one tag"
+                            spellcheck="false"
+                            autocomplete="off"
+                        />
+                        <button id="task-form-tag-add">+</button>
+                    </div>
+                    <p id="quick-tags-label" class="muted">Quick tags</p>
+                    <div id="task-form-quick-tags" class="chip-row"></div>
+                </div>
+
+                <p id="task-form-times" class="muted"></p>
             </div>
-          </label>
-          <label id="completed-label">
-            Completed
-            <input id="task-form-completed" type="hidden" />
-            <div class="datetime-control">
-              <button id="task-form-completed-open" type="button" class="time-display empty">No time selected</button>
-              <button id="task-form-completed-clear" type="button" class="tiny-btn">✕</button>
+
+            <div class="modal-foot">
+                <button
+                    id="task-modal-delete"
+                    class="danger"
+                    style="display: none"
+                >
+                    Delete
+                </button>
+                <button id="task-modal-save" class="primary">Save</button>
+                <button id="task-modal-cancel">Close</button>
             </div>
-          </label>
-        </div>
+        </dialog>
 
-        <div class="choice-field recurrence-line">
-          <span id="recurring-label">Recurring</span>
-          <button id="task-form-recurring-toggle" type="button" class="pin-toggle">Does not repeat</button>
-        </div>
-
-        <div id="task-form-recurring-row" class="row two-col" style="display: none">
-          <label id="recurring-repeat-label">
-            Repeat
-            <div id="task-form-recurring-frequency" class="select-list"></div>
-          </label>
-          <label id="recurring-due-time-label">
-            Due time
-            <div class="recurring-time-row">
-              <div id="task-form-recurring-hour" class="select-list"></div>
-              <div id="task-form-recurring-minute" class="select-list"></div>
-              <button id="task-form-recurring-custom-btn" type="button">Custom</button>
+        <dialog id="summary-modal" class="modal summary-modal">
+            <div class="modal-head">
+                <h2 id="summary-title"></h2>
+                <button id="summary-close-btn" type="button">✕</button>
             </div>
-          </label>
-        </div>
+            <div class="modal-body summary-body">
+                <p id="summary-state-row" class="muted"></p>
+                <p id="summary-priority-row" class="muted"></p>
+                <p id="summary-description-row"></p>
+                <p id="summary-tags-row" class="muted"></p>
+                <p id="summary-times-row" class="muted"></p>
+            </div>
+            <div class="modal-foot">
+                <button
+                    id="summary-open-detail-btn"
+                    class="primary"
+                    type="button"
+                >
+                    Open Details
+                </button>
+                <button id="summary-close-footer-btn" type="button">
+                    Close
+                </button>
+            </div>
+        </dialog>
 
-        <div>
-          <p id="tags-label" class="muted">Tags</p>
-          <div id="task-form-tags-list" class="chip-row"></div>
-          <div class="tag-input-row">
-            <input id="task-form-tag-input" type="text" placeholder="Add one tag" spellcheck="false" autocomplete="off" />
-            <button id="task-form-tag-add">+</button>
-          </div>
-          <p id="quick-tags-label" class="muted">Quick tags</p>
-          <div id="task-form-quick-tags" class="chip-row"></div>
-        </div>
+        <dialog id="settings-modal" class="modal settings-modal">
+            <div class="modal-head">
+                <h2 id="settings-title">Settings</h2>
+                <button id="settings-modal-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="choice-field">
+                    <span id="settings-theme-label">Theme</span>
+                    <div id="settings-theme" class="select-list"></div>
+                </div>
+                <div class="choice-field">
+                    <span id="settings-language-label">Language</span>
+                    <div id="settings-language" class="select-list"></div>
+                </div>
+                <div class="choice-field">
+                    <span id="settings-optional-states-label"
+                        >Optional task states</span
+                    >
+                    <div
+                        id="settings-optional-states"
+                        class="segmented settings-state-toggles"
+                    ></div>
+                </div>
+                <label class="check-inline">
+                    <input
+                        id="settings-auto-complete-parents"
+                        type="checkbox"
+                    />
+                    <span id="settings-auto-complete-parents-label"
+                        >Auto complete parent tasks</span
+                    >
+                </label>
+                <label id="settings-task-font-size-label">
+                    Task Font Size
+                    <input
+                        id="settings-task-font-size"
+                        type="range"
+                        min="11"
+                        max="28"
+                        step="1"
+                    />
+                    <span
+                        id="settings-task-font-size-value"
+                        class="muted"
+                    ></span>
+                </label>
+                <label id="settings-ui-scale-label">
+                    UI Scale
+                    <input
+                        id="settings-ui-scale"
+                        type="range"
+                        min="0.8"
+                        max="1.4"
+                        step="0.05"
+                    />
+                    <span id="settings-ui-scale-value" class="muted"></span>
+                </label>
+                <label id="settings-theme-path-label">
+                    Import Theme Path
+                    <input
+                        id="settings-theme-path"
+                        type="text"
+                        placeholder="/absolute/path/to/theme.toml"
+                        spellcheck="false"
+                        autocomplete="off"
+                    />
+                </label>
+                <p id="settings-theme-default-path" class="muted"></p>
+                <label id="settings-data-dir-label">
+                    Data Directory Path
+                    <input
+                        id="settings-data-dir"
+                        type="text"
+                        placeholder="/absolute/path/to/data/dir"
+                        spellcheck="false"
+                        autocomplete="off"
+                    />
+                </label>
+            </div>
+            <div class="modal-foot">
+                <button id="settings-import-btn">Import Theme</button>
+                <button id="settings-load-taskbar-btn">
+                    Load taskbar.json
+                </button>
+                <button id="settings-save-btn" class="primary">Save</button>
+                <button id="settings-delete-data-btn" class="danger">
+                    Delete all data and exit
+                </button>
+            </div>
+        </dialog>
 
-        <p id="task-form-times" class="muted"></p>
-      </div>
+        <dialog id="filter-modal" class="modal filter-modal">
+            <div class="modal-head">
+                <h2 id="filter-title">Filter</h2>
+                <button id="filter-modal-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="filter-grid">
+                    <div class="choice-field">
+                        <span id="filter-importance-label">Importance</span>
+                        <div
+                            id="filter-importance-buttons"
+                            class="segmented filter-buttons"
+                        ></div>
+                    </div>
+                    <div class="choice-field">
+                        <span id="filter-urgency-label">Urgency</span>
+                        <div
+                            id="filter-urgency-buttons"
+                            class="segmented filter-buttons"
+                        ></div>
+                    </div>
+                    <div class="choice-field">
+                        <span id="filter-state-label">State</span>
+                        <div
+                            id="filter-state-buttons"
+                            class="segmented filter-buttons"
+                        ></div>
+                    </div>
+                    <div class="choice-field">
+                        <span id="filter-pinned-label">Pinned</span>
+                        <div
+                            id="filter-pinned-buttons"
+                            class="segmented filter-buttons"
+                        ></div>
+                    </div>
+                </div>
 
-      <div class="modal-foot">
-        <button id="task-modal-delete" class="danger" style="display: none">Delete</button>
-        <button id="task-modal-save" class="primary">Save</button>
-        <button id="task-modal-cancel">Close</button>
-      </div>
-    </dialog>
+                <div>
+                    <p id="filter-tags-label" class="muted">Tags</p>
+                    <div id="filter-tags" class="chip-row"></div>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button id="filter-clear-btn">Clear All</button>
+                <button id="filter-apply-btn" class="primary">Confirm</button>
+            </div>
+        </dialog>
 
-    <dialog id="summary-modal" class="modal summary-modal">
-      <div class="modal-head">
-        <h2 id="summary-title"></h2>
-        <button id="summary-close-btn" type="button">✕</button>
-      </div>
-      <div class="modal-body summary-body">
-        <p id="summary-state-row" class="muted"></p>
-        <p id="summary-priority-row" class="muted"></p>
-        <p id="summary-description-row"></p>
-        <p id="summary-tags-row" class="muted"></p>
-        <p id="summary-times-row" class="muted"></p>
-      </div>
-      <div class="modal-foot">
-        <button id="summary-open-detail-btn" class="primary" type="button">Open Details</button>
-        <button id="summary-close-footer-btn" type="button">Close</button>
-      </div>
-    </dialog>
+        <dialog id="time-modal" class="modal time-modal">
+            <div class="modal-head">
+                <h2 id="time-modal-title">Set Time</h2>
+                <button id="time-modal-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="row time-row">
+                    <label
+                        ><span id="time-year-label">Year</span>
+                        <div id="time-year" class="select-list"></div
+                    ></label>
+                    <label
+                        ><span id="time-month-label">Month</span>
+                        <div id="time-month" class="select-list"></div
+                    ></label>
+                    <label
+                        ><span id="time-day-label">Day</span>
+                        <div id="time-day" class="select-list"></div
+                    ></label>
+                    <label
+                        ><span id="time-hour-label">Hour</span>
+                        <div id="time-hour" class="select-list"></div
+                    ></label>
+                    <label
+                        ><span id="time-minute-label">Mins</span>
+                        <div id="time-minute" class="select-list"></div
+                    ></label>
+                </div>
+                <div class="chip-row">
+                    <button id="time-suggest-now" type="button" class="chip">
+                        Now
+                    </button>
+                    <button
+                        id="time-suggest-tonight"
+                        type="button"
+                        class="chip"
+                    >
+                        Tonight
+                    </button>
+                    <button id="time-suggest-plus15" type="button" class="chip">
+                        15 mins later
+                    </button>
+                    <button
+                        id="time-suggest-tomorrow"
+                        type="button"
+                        class="chip"
+                    >
+                        Tomorrow 9:00
+                    </button>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button id="time-modal-save" class="primary">Save</button>
+                <button id="time-modal-cancel">Cancel</button>
+            </div>
+        </dialog>
 
-    <dialog id="settings-modal" class="modal settings-modal">
-      <div class="modal-head">
-        <h2 id="settings-title">Settings</h2>
-        <button id="settings-modal-close">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="choice-field">
-          <span id="settings-theme-label">Theme</span>
-          <div id="settings-theme" class="select-list"></div>
-        </div>
-        <div class="choice-field">
-          <span id="settings-language-label">Language</span>
-          <div id="settings-language" class="select-list"></div>
-        </div>
-        <div class="choice-field">
-          <span id="settings-optional-states-label">Optional task states</span>
-          <div id="settings-optional-states" class="segmented settings-state-toggles"></div>
-        </div>
-        <label class="check-inline">
-          <input id="settings-auto-complete-parents" type="checkbox" />
-          <span id="settings-auto-complete-parents-label">Auto complete parent tasks</span>
-        </label>
-        <label id="settings-task-font-size-label">
-          Task Font Size
-          <input id="settings-task-font-size" type="range" min="11" max="28" step="1" />
-          <span id="settings-task-font-size-value" class="muted"></span>
-        </label>
-        <label id="settings-ui-scale-label">
-          UI Scale
-          <input id="settings-ui-scale" type="range" min="0.8" max="1.4" step="0.05" />
-          <span id="settings-ui-scale-value" class="muted"></span>
-        </label>
-        <label id="settings-theme-path-label">
-          Import Theme Path
-          <input id="settings-theme-path" type="text" placeholder="/absolute/path/to/theme.toml" spellcheck="false" autocomplete="off" />
-        </label>
-        <p id="settings-theme-default-path" class="muted"></p>
-        <label id="settings-data-dir-label">
-          Data Directory Path
-          <input id="settings-data-dir" type="text" placeholder="/absolute/path/to/data/dir" spellcheck="false" autocomplete="off" />
-        </label>
-      </div>
-      <div class="modal-foot">
-        <button id="settings-import-btn">Import Theme</button>
-        <button id="settings-load-taskbar-btn">Load taskbar.json</button>
-        <button id="settings-save-btn" class="primary">Save</button>
-        <button id="settings-delete-data-btn" class="danger">Delete all data and exit</button>
-      </div>
-    </dialog>
+        <dialog id="recurrence-modal" class="modal recurrence-modal">
+            <div class="modal-head">
+                <h2 id="recurrence-custom-title">Custom Recurrence</h2>
+                <button id="recurrence-modal-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="row recurrence-top">
+                    <label>
+                        <span id="recurrence-repeats-every-label"
+                            >Repeats every</span
+                        >
+                        <input
+                            id="recurrence-every"
+                            type="number"
+                            min="1"
+                            step="1"
+                            value="1"
+                        />
+                    </label>
+                    <label id="recurrence-unit-label">
+                        Unit
+                        <div id="recurrence-unit" class="select-list"></div>
+                    </label>
+                </div>
+                <div class="choice-field">
+                    <span id="recurrence-ends-label">Ends</span>
+                    <div id="recurrence-end-mode" class="segmented compact">
+                        <button
+                            type="button"
+                            data-value="Never"
+                            id="recurrence-end-never-btn"
+                        >
+                            Never
+                        </button>
+                        <button
+                            type="button"
+                            data-value="OnDate"
+                            id="recurrence-end-on-btn"
+                        >
+                            On
+                        </button>
+                        <button
+                            type="button"
+                            data-value="AfterOccurrences"
+                            id="recurrence-end-after-btn"
+                        >
+                            After
+                        </button>
+                    </div>
+                </div>
+                <div class="row recurrence-end-row">
+                    <label id="recurrence-on-date-label">
+                        On date
+                        <input id="recurrence-end-date" type="date" />
+                    </label>
+                    <label id="recurrence-occurrences-label">
+                        Occurrences
+                        <input
+                            id="recurrence-end-count"
+                            type="number"
+                            min="1"
+                            step="1"
+                            value="1"
+                        />
+                    </label>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button id="recurrence-modal-save" class="primary">Save</button>
+                <button id="recurrence-modal-cancel">Cancel</button>
+            </div>
+        </dialog>
 
-    <dialog id="filter-modal" class="modal filter-modal">
-      <div class="modal-head">
-        <h2 id="filter-title">Filter</h2>
-        <button id="filter-modal-close">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="filter-grid">
-          <div class="choice-field">
-            <span id="filter-importance-label">Importance</span>
-            <div id="filter-importance-buttons" class="segmented filter-buttons"></div>
-          </div>
-          <div class="choice-field">
-            <span id="filter-urgency-label">Urgency</span>
-            <div id="filter-urgency-buttons" class="segmented filter-buttons"></div>
-          </div>
-          <div class="choice-field">
-            <span id="filter-state-label">State</span>
-            <div id="filter-state-buttons" class="segmented filter-buttons"></div>
-          </div>
-          <div class="choice-field">
-            <span id="filter-pinned-label">Pinned</span>
-            <div id="filter-pinned-buttons" class="segmented filter-buttons"></div>
-          </div>
-        </div>
+        <dialog id="confirm-modal" class="modal confirm-modal">
+            <div class="modal-head">
+                <h2 id="confirm-title">Confirm</h2>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-message"></p>
+            </div>
+            <div class="modal-foot">
+                <button id="confirm-cancel-btn" type="button">Cancel</button>
+                <button id="confirm-ok-btn" class="danger" type="button">
+                    Confirm
+                </button>
+            </div>
+        </dialog>
 
-        <div>
-          <p id="filter-tags-label" class="muted">Tags</p>
-          <div id="filter-tags" class="chip-row"></div>
-        </div>
-      </div>
-      <div class="modal-foot">
-        <button id="filter-clear-btn">Clear All</button>
-        <button id="filter-apply-btn" class="primary">Confirm</button>
-      </div>
-    </dialog>
-
-    <dialog id="time-modal" class="modal time-modal">
-      <div class="modal-head">
-        <h2 id="time-modal-title">Set Time</h2>
-        <button id="time-modal-close">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="row time-row">
-          <label><span id="time-year-label">Year</span><div id="time-year" class="select-list"></div></label>
-          <label><span id="time-month-label">Month</span><div id="time-month" class="select-list"></div></label>
-          <label><span id="time-day-label">Day</span><div id="time-day" class="select-list"></div></label>
-          <label><span id="time-hour-label">Hour</span><div id="time-hour" class="select-list"></div></label>
-          <label><span id="time-minute-label">Mins</span><div id="time-minute" class="select-list"></div></label>
-        </div>
-        <div class="chip-row">
-          <button id="time-suggest-now" type="button" class="chip">Now</button>
-          <button id="time-suggest-tonight" type="button" class="chip">Tonight</button>
-          <button id="time-suggest-plus15" type="button" class="chip">15 mins later</button>
-          <button id="time-suggest-tomorrow" type="button" class="chip">Tomorrow 9:00</button>
-        </div>
-      </div>
-      <div class="modal-foot">
-        <button id="time-modal-save" class="primary">Save</button>
-        <button id="time-modal-cancel">Cancel</button>
-      </div>
-    </dialog>
-
-    <dialog id="recurrence-modal" class="modal recurrence-modal">
-      <div class="modal-head">
-        <h2 id="recurrence-custom-title">Custom Recurrence</h2>
-        <button id="recurrence-modal-close">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="row recurrence-top">
-          <label>
-            <span id="recurrence-repeats-every-label">Repeats every</span>
-            <input id="recurrence-every" type="number" min="1" step="1" value="1" />
-          </label>
-          <label id="recurrence-unit-label">
-            Unit
-            <div id="recurrence-unit" class="select-list"></div>
-          </label>
-        </div>
-        <div class="choice-field">
-          <span id="recurrence-ends-label">Ends</span>
-          <div id="recurrence-end-mode" class="segmented compact">
-            <button type="button" data-value="Never" id="recurrence-end-never-btn">Never</button>
-            <button type="button" data-value="OnDate" id="recurrence-end-on-btn">On</button>
-            <button type="button" data-value="AfterOccurrences" id="recurrence-end-after-btn">After</button>
-          </div>
-        </div>
-        <div class="row recurrence-end-row">
-          <label id="recurrence-on-date-label">
-            On date
-            <input id="recurrence-end-date" type="date" />
-          </label>
-          <label id="recurrence-occurrences-label">
-            Occurrences
-            <input id="recurrence-end-count" type="number" min="1" step="1" value="1" />
-          </label>
-        </div>
-      </div>
-      <div class="modal-foot">
-        <button id="recurrence-modal-save" class="primary">Save</button>
-        <button id="recurrence-modal-cancel">Cancel</button>
-      </div>
-    </dialog>
-
-    <dialog id="confirm-modal" class="modal confirm-modal">
-      <div class="modal-head">
-        <h2 id="confirm-title">Confirm</h2>
-      </div>
-      <div class="modal-body">
-        <p id="confirm-message"></p>
-      </div>
-      <div class="modal-foot">
-        <button id="confirm-cancel-btn" type="button">Cancel</button>
-        <button id="confirm-ok-btn" class="danger" type="button">Confirm</button>
-      </div>
-    </dialog>
-
-    <script type="module" src="app.js"></script>
-    <div id="hover-tip" class="hover-tip" style="display: none"></div>
-  </body>
+        <script type="module" src="app.js"></script>
+        <div id="hover-tip" class="hover-tip" style="display: none"></div>
+    </body>
 </html>

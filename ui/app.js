@@ -4,7 +4,8 @@ const invoke =
   window.__TAURI_INVOKE__;
 
 if (!invoke) {
-  document.body.innerHTML = "<p style='padding:16px'>Tauri invoke API is not available.</p>";
+  document.body.innerHTML =
+    "<p style='padding:16px'>Tauri invoke API is not available.</p>";
   throw new Error("Tauri invoke API is not available");
 }
 
@@ -40,12 +41,20 @@ const els = {
   taskFormCompleted: document.getElementById("task-form-completed"),
   taskFormCompletedOpen: document.getElementById("task-form-completed-open"),
   taskFormCompletedClear: document.getElementById("task-form-completed-clear"),
-  taskFormRecurringToggle: document.getElementById("task-form-recurring-toggle"),
+  taskFormRecurringToggle: document.getElementById(
+    "task-form-recurring-toggle",
+  ),
   taskFormRecurringRow: document.getElementById("task-form-recurring-row"),
-  taskFormRecurringFrequency: document.getElementById("task-form-recurring-frequency"),
+  taskFormRecurringFrequency: document.getElementById(
+    "task-form-recurring-frequency",
+  ),
   taskFormRecurringHour: document.getElementById("task-form-recurring-hour"),
-  taskFormRecurringMinute: document.getElementById("task-form-recurring-minute"),
-  taskFormRecurringCustomBtn: document.getElementById("task-form-recurring-custom-btn"),
+  taskFormRecurringMinute: document.getElementById(
+    "task-form-recurring-minute",
+  ),
+  taskFormRecurringCustomBtn: document.getElementById(
+    "task-form-recurring-custom-btn",
+  ),
   taskFormTagInput: document.getElementById("task-form-tag-input"),
   taskFormTagAdd: document.getElementById("task-form-tag-add"),
   taskFormTagsList: document.getElementById("task-form-tags-list"),
@@ -69,11 +78,17 @@ const els = {
   settingsTheme: document.getElementById("settings-theme"),
   settingsLanguage: document.getElementById("settings-language"),
   settingsOptionalStates: document.getElementById("settings-optional-states"),
-  settingsAutoCompleteParents: document.getElementById("settings-auto-complete-parents"),
+  settingsAutoCompleteParents: document.getElementById(
+    "settings-auto-complete-parents",
+  ),
   settingsTaskFontSize: document.getElementById("settings-task-font-size"),
-  settingsTaskFontSizeValue: document.getElementById("settings-task-font-size-value"),
+  settingsTaskFontSizeValue: document.getElementById(
+    "settings-task-font-size-value",
+  ),
   settingsThemePath: document.getElementById("settings-theme-path"),
-  settingsThemeDefaultPath: document.getElementById("settings-theme-default-path"),
+  settingsThemeDefaultPath: document.getElementById(
+    "settings-theme-default-path",
+  ),
   settingsDataDir: document.getElementById("settings-data-dir"),
   settingsImportBtn: document.getElementById("settings-import-btn"),
   settingsLoadTaskbarBtn: document.getElementById("settings-load-taskbar-btn"),
@@ -178,8 +193,14 @@ function localizeInvokeError(command, text) {
   if (command === "undo_last_change" && text.includes("Nothing to undo")) {
     return t("error_nothing_to_undo", "Nothing to undo.");
   }
-  if (command === "reload_taskbar_file" && text.includes("Failed to read taskbar file")) {
-    return t("error_load_taskbar_json", "Failed to load taskbar.json from the configured directory.");
+  if (
+    command === "reload_taskbar_file" &&
+    text.includes("Failed to read taskbar file")
+  ) {
+    return t(
+      "error_load_taskbar_json",
+      "Failed to load taskbar.json from the configured directory.",
+    );
   }
   return text;
 }
@@ -187,9 +208,14 @@ function localizeInvokeError(command, text) {
 async function safeInvoke(command, payload) {
   try {
     setError("");
-    return await invoke(command, payload);
+    console.log("[invoke][js] calling:", command, payload);
+    const result = await invoke(command, payload);
+    console.log("[invoke][js] success:", command, result);
+    return result;
   } catch (error) {
+    console.error("[invoke][js] failed:", command, error);
     const text = typeof error === "string" ? error : JSON.stringify(error);
+    console.error("[invoke][js] failed text:", text);
     setError(localizeInvokeError(command, text));
     throw error;
   }
@@ -210,35 +236,99 @@ function applyUiScale(value) {
 
 function askConfirmation(title, message, confirmLabel = null) {
   return new Promise((resolve) => {
+    console.log("[confirm] open", { title, message, confirmLabel });
+
+    const modal = els.confirmModal;
+    const okBtn = els.confirmOkBtn;
+    const cancelBtn = els.confirmCancelBtn;
+
+    okBtn.type = "button";
+    cancelBtn.type = "button";
+
+    // 理论上不该还开着；如果开着，先关掉并清空返回值
+    if (modal.open) {
+      console.log("[confirm] modal already open, force close before reuse");
+      modal.close();
+    }
+    modal.returnValue = "";
+
     els.confirmTitle.textContent = title;
     els.confirmMessage.textContent = message;
-    els.confirmOkBtn.textContent = confirmLabel || t("confirm", "Confirm");
+    okBtn.textContent = confirmLabel || t("confirm", "Confirm");
 
-    const finish = (result) => {
-      cleanup();
-      if (els.confirmModal.open) {
-        els.confirmModal.close();
+    let settled = false;
+
+    const cleanup = () => {
+      console.log("[confirm] cleanup listeners");
+      okBtn.removeEventListener("click", onConfirm);
+      cancelBtn.removeEventListener("click", onCancelClick);
+      modal.removeEventListener("cancel", onCancelEvent);
+      modal.removeEventListener("close", onClose);
+    };
+
+    const finish = (result, source) => {
+      if (settled) {
+        console.log("[confirm] finish ignored", { result, source });
+        return;
       }
+      settled = true;
+      console.log("[confirm] finish", { result, source });
+      cleanup();
       resolve(result);
     };
 
-    const onCancel = () => finish(false);
-    const onConfirm = () => finish(true);
-    const onClose = () => finish(false);
+    const onConfirm = (event) => {
+      console.log("[confirm] confirm button clicked");
+      event.preventDefault();
+      event.stopPropagation();
 
-    const cleanup = () => {
-      els.confirmCancelBtn.removeEventListener("click", onCancel);
-      els.confirmOkBtn.removeEventListener("click", onConfirm);
-      els.confirmModal.removeEventListener("close", onClose);
+      // 不在这里 resolve，统一交给 onClose
+      if (modal.open) {
+        modal.close("confirm");
+      }
     };
 
-    els.confirmCancelBtn.addEventListener("click", onCancel);
-    els.confirmOkBtn.addEventListener("click", onConfirm);
-    els.confirmModal.addEventListener("close", onClose);
-    els.confirmModal.showModal();
+    const onCancelClick = (event) => {
+      console.log("[confirm] cancel button clicked");
+      event.preventDefault();
+      event.stopPropagation();
+
+      // 不在这里 resolve，统一交给 onClose
+      if (modal.open) {
+        modal.close("cancel");
+      }
+    };
+
+    const onCancelEvent = (event) => {
+      console.log("[confirm] dialog cancel event fired");
+      event.preventDefault();
+
+      // Esc / 原生取消行为，也统一走 close
+      if (modal.open) {
+        modal.close("cancel");
+      }
+    };
+
+    const onClose = () => {
+      const rv = modal.returnValue;
+      console.log("[confirm] dialog close event fired", { returnValue: rv });
+
+      if (rv === "confirm") {
+        finish(true, "close-confirm");
+      } else {
+        finish(false, "close-cancel");
+      }
+    };
+
+    okBtn.addEventListener("click", onConfirm);
+    cancelBtn.addEventListener("click", onCancelClick);
+    modal.addEventListener("cancel", onCancelEvent);
+    modal.addEventListener("close", onClose);
+
+    console.log("[confirm] showModal()");
+    modal.showModal();
   });
 }
-
 async function invokeCreateTask(parentId, draft) {
   try {
     return await safeInvoke("create_task", { parentId, draft });
@@ -257,7 +347,11 @@ async function invokeSetTaskState(id, state) {
 
 async function invokeSetTaskStateWithOptions(id, state, cascadeDescendants) {
   try {
-    return await safeInvoke("set_task_state", { id, taskState: state, cascadeDescendants });
+    return await safeInvoke("set_task_state", {
+      id,
+      taskState: state,
+      cascadeDescendants,
+    });
   } catch {
     return await safeInvoke("set_task_state", {
       id,
@@ -269,7 +363,11 @@ async function invokeSetTaskStateWithOptions(id, state, cascadeDescendants) {
 
 async function invokeUpdateTaskWithOptions(id, draft, cascadeDescendants) {
   try {
-    return await safeInvoke("update_task_with_options", { id, draft, cascadeDescendants });
+    return await safeInvoke("update_task_with_options", {
+      id,
+      draft,
+      cascadeDescendants,
+    });
   } catch {
     return await safeInvoke("update_task_with_options", {
       id,
@@ -291,7 +389,11 @@ async function invokeMoveTask(taskId, targetId, relation) {
   try {
     return await safeInvoke("move_task", { taskId, targetId, relation });
   } catch {
-    return await safeInvoke("move_task", { task_id: taskId, target_id: targetId, relation });
+    return await safeInvoke("move_task", {
+      task_id: taskId,
+      target_id: targetId,
+      relation,
+    });
   }
 }
 
@@ -309,7 +411,9 @@ function isStateSelectable(value) {
 }
 
 function availableSelectableTaskStates() {
-  return ["Todo", "InProgress", "Blocked", "Completed", "Archived"].filter(isStateSelectable);
+  return ["Todo", "InProgress", "Blocked", "Completed", "Archived"].filter(
+    isStateSelectable,
+  );
 }
 
 function localFromIso(iso) {
@@ -344,7 +448,9 @@ function updateTimeButtons() {
   const due = els.taskFormDue.value || "";
   const completed = els.taskFormCompleted.value || "";
 
-  els.taskFormDueOpen.textContent = due ? formatTimeDisplay(due) : t("none", "No time selected");
+  els.taskFormDueOpen.textContent = due
+    ? formatTimeDisplay(due)
+    : t("none", "No time selected");
   els.taskFormDueOpen.classList.toggle("empty", !due);
 
   els.taskFormCompletedOpen.textContent = completed
@@ -396,7 +502,7 @@ function clampDayForCurrentMonth() {
   renderSelectList(
     els.timeDay,
     buildRange(1, maxDay),
-    String(Math.min(current, maxDay))
+    String(Math.min(current, maxDay)),
   );
 }
 
@@ -407,19 +513,31 @@ function setTimeModalFromDate(date) {
     buildRange(nowYear - 2, nowYear + 8),
     String(date.getFullYear()),
     (value) => value,
-    () => clampDayForCurrentMonth()
+    () => clampDayForCurrentMonth(),
   );
   renderSelectList(
     els.timeMonth,
     buildRange(1, 12),
     String(date.getMonth() + 1),
     (value) => value,
-    () => clampDayForCurrentMonth()
+    () => clampDayForCurrentMonth(),
   );
-  renderSelectList(els.timeHour, buildRange(0, 23, 2), String(date.getHours()).padStart(2, "0"));
-  renderSelectList(els.timeMinute, buildRange(0, 59, 2), String(date.getMinutes()).padStart(2, "0"));
+  renderSelectList(
+    els.timeHour,
+    buildRange(0, 23, 2),
+    String(date.getHours()).padStart(2, "0"),
+  );
+  renderSelectList(
+    els.timeMinute,
+    buildRange(0, 59, 2),
+    String(date.getMinutes()).padStart(2, "0"),
+  );
   const maxDay = daysInMonth(date.getFullYear(), date.getMonth() + 1);
-  renderSelectList(els.timeDay, buildRange(1, maxDay), String(Math.min(date.getDate(), maxDay)));
+  renderSelectList(
+    els.timeDay,
+    buildRange(1, maxDay),
+    String(Math.min(date.getDate(), maxDay)),
+  );
 }
 
 function selectedDateFromTimeModal() {
@@ -433,10 +551,14 @@ function selectedDateFromTimeModal() {
 
 function openTimeModal(field) {
   app.timeEditingField = field;
-  const iso = field === "due" ? els.taskFormDue.value : els.taskFormCompleted.value;
+  const iso =
+    field === "due" ? els.taskFormDue.value : els.taskFormCompleted.value;
   const base = iso ? new Date(iso) : new Date();
   setTimeModalFromDate(Number.isNaN(base.getTime()) ? new Date() : base);
-  els.timeModalTitle.textContent = field === "due" ? t("set_due_time", "Set Due Time") : t("set_completed_time", "Set Completed Time");
+  els.timeModalTitle.textContent =
+    field === "due"
+      ? t("set_due_time", "Set Due Time")
+      : t("set_completed_time", "Set Completed Time");
   els.timeModal.showModal();
 }
 
@@ -623,9 +745,12 @@ function applyDueTimeToRecurrenceDraft() {
 function toRecurrencePayload() {
   if (!app.recurrenceEnabled) return null;
   const draft = app.recurrenceDraft || defaultRecurrenceDraft();
-  draft.frequency = getSelectListValue(els.taskFormRecurringFrequency) || draft.frequency;
-  draft.due_hour = getSelectListValue(els.taskFormRecurringHour) || draft.due_hour;
-  draft.due_minute = getSelectListValue(els.taskFormRecurringMinute) || draft.due_minute;
+  draft.frequency =
+    getSelectListValue(els.taskFormRecurringFrequency) || draft.frequency;
+  draft.due_hour =
+    getSelectListValue(els.taskFormRecurringHour) || draft.due_hour;
+  draft.due_minute =
+    getSelectListValue(els.taskFormRecurringMinute) || draft.due_minute;
   if (draft.frequency === "DoesNotRepeat") return null;
   const payload = {
     frequency: draft.frequency,
@@ -635,11 +760,17 @@ function toRecurrencePayload() {
     occurrences_done: 0,
   };
   if (draft.frequency === "Custom") {
-    const end = draft.custom?.end || { mode: "Never", on_date: "", after_count: 1 };
+    const end = draft.custom?.end || {
+      mode: "Never",
+      on_date: "",
+      after_count: 1,
+    };
     let endValue = "Never";
     if (end.mode === "OnDate" && end.on_date) {
       const [y, m, d] = end.on_date.split("-").map((part) => Number(part));
-      const onDateIso = new Date(Date.UTC(y, (m || 1) - 1, d || 1, 0, 0, 0)).toISOString();
+      const onDateIso = new Date(
+        Date.UTC(y, (m || 1) - 1, d || 1, 0, 0, 0),
+      ).toISOString();
       endValue = { OnDate: onDateIso };
     } else if (end.mode === "AfterOccurrences") {
       endValue = { AfterOccurrences: Number(end.after_count || 1) };
@@ -663,40 +794,72 @@ function renderRecurrenceControls() {
   els.taskFormRecurringRow.style.display = app.recurrenceEnabled ? "" : "none";
   if (!app.recurrenceEnabled) return;
 
-  const frequencies = ["DoesNotRepeat", "Daily", "Weekly", "Biweekly", "Monthly", "Yearly", "Custom"];
-  renderSelectList(els.taskFormRecurringFrequency, frequencies, draft.frequency, (value) => {
-    if (value === "DoesNotRepeat") return t("recurring_off", "Does not repeat");
-    if (value === "Daily") return t("recurrence_daily", "Daily");
-    if (value === "Weekly") return t("recurrence_weekly", "Weekly");
-    if (value === "Biweekly") return t("recurrence_biweekly", "Biweekly");
-    if (value === "Monthly") return t("recurrence_monthly", "Monthly");
-    if (value === "Yearly") return t("recurrence_yearly", "Yearly");
-    return t("recurring_custom", "Custom");
-  }, (value) => {
-    app.recurrenceDraft.frequency = value;
-    els.taskFormRecurringCustomBtn.style.display = value === "Custom" ? "" : "none";
-    if (value === "Custom") {
-      openRecurrenceModal();
-    }
-  });
-  renderSelectList(els.taskFormRecurringHour, buildRange(0, 23, 2), draft.due_hour);
-  renderSelectList(els.taskFormRecurringMinute, buildRange(0, 59, 2), draft.due_minute);
-  els.taskFormRecurringCustomBtn.style.display = draft.frequency === "Custom" ? "" : "none";
+  const frequencies = [
+    "DoesNotRepeat",
+    "Daily",
+    "Weekly",
+    "Biweekly",
+    "Monthly",
+    "Yearly",
+    "Custom",
+  ];
+  renderSelectList(
+    els.taskFormRecurringFrequency,
+    frequencies,
+    draft.frequency,
+    (value) => {
+      if (value === "DoesNotRepeat")
+        return t("recurring_off", "Does not repeat");
+      if (value === "Daily") return t("recurrence_daily", "Daily");
+      if (value === "Weekly") return t("recurrence_weekly", "Weekly");
+      if (value === "Biweekly") return t("recurrence_biweekly", "Biweekly");
+      if (value === "Monthly") return t("recurrence_monthly", "Monthly");
+      if (value === "Yearly") return t("recurrence_yearly", "Yearly");
+      return t("recurring_custom", "Custom");
+    },
+    (value) => {
+      app.recurrenceDraft.frequency = value;
+      els.taskFormRecurringCustomBtn.style.display =
+        value === "Custom" ? "" : "none";
+      if (value === "Custom") {
+        openRecurrenceModal();
+      }
+    },
+  );
+  renderSelectList(
+    els.taskFormRecurringHour,
+    buildRange(0, 23, 2),
+    draft.due_hour,
+  );
+  renderSelectList(
+    els.taskFormRecurringMinute,
+    buildRange(0, 59, 2),
+    draft.due_minute,
+  );
+  els.taskFormRecurringCustomBtn.style.display =
+    draft.frequency === "Custom" ? "" : "none";
 }
 
 function openRecurrenceModal() {
   if (!app.recurrenceDraft) app.recurrenceDraft = defaultRecurrenceDraft();
   const custom = app.recurrenceDraft.custom || defaultRecurrenceDraft().custom;
   els.recurrenceEvery.value = String(Math.max(1, Number(custom.every || 1)));
-  renderSelectList(els.recurrenceUnit, ["Day", "Week", "Month", "Year"], custom.unit || "Day", (value) => {
-    if (value === "Day") return t("recurrence_unit_day", "Day(s)");
-    if (value === "Week") return t("recurrence_unit_week", "Week(s)");
-    if (value === "Month") return t("recurrence_unit_month", "Month(s)");
-    return t("recurrence_unit_year", "Year(s)");
-  });
+  renderSelectList(
+    els.recurrenceUnit,
+    ["Day", "Week", "Month", "Year"],
+    custom.unit || "Day",
+    (value) => {
+      if (value === "Day") return t("recurrence_unit_day", "Day(s)");
+      if (value === "Week") return t("recurrence_unit_week", "Week(s)");
+      if (value === "Month") return t("recurrence_unit_month", "Month(s)");
+      return t("recurrence_unit_year", "Year(s)");
+    },
+  );
   setSegmentedValue(els.recurrenceEndMode, custom.end?.mode || "Never");
   els.recurrenceEndDate.value = custom.end?.on_date || "";
-  els.recurrenceEndCount.value = String(Math.max(1, Number(custom.end?.after_count || 1)));
+  els.recurrenceEndCount.value = String(
+    Math.max(1, Number(custom.end?.after_count || 1)),
+  );
   syncRecurrenceEndInputs();
   els.recurrenceModal.showModal();
 }
@@ -714,7 +877,9 @@ function getSegmentedValue(groupEl) {
 
 function wireSegmentedGroup(groupEl) {
   for (const btn of groupEl.querySelectorAll("button[data-value]")) {
-    btn.addEventListener("click", () => setSegmentedValue(groupEl, btn.dataset.value));
+    btn.addEventListener("click", () =>
+      setSegmentedValue(groupEl, btn.dataset.value),
+    );
   }
 }
 
@@ -755,7 +920,7 @@ function renderSelectList(
   selected,
   formatLabel = (value) => value,
   onChange = null,
-  formatTriggerLabel = null
+  formatTriggerLabel = null,
 ) {
   controlEl.innerHTML = "";
   controlEl.classList.remove("open");
@@ -797,7 +962,9 @@ function renderSelectList(
 
   trigger.addEventListener("click", () => {
     const opening = !controlEl.classList.contains("open");
-    document.querySelectorAll(".select-list.open").forEach((node) => node.classList.remove("open"));
+    document
+      .querySelectorAll(".select-list.open")
+      .forEach((node) => node.classList.remove("open"));
     if (opening) controlEl.classList.add("open");
   });
 }
@@ -843,7 +1010,10 @@ function setupHoverTips() {
   }
 
   document.addEventListener("mousemove", (event) => {
-    const target = event.target instanceof Element ? event.target.closest("[data-tip]") : null;
+    const target =
+      event.target instanceof Element
+        ? event.target.closest("[data-tip]")
+        : null;
     if (!target) {
       hide();
       return;
@@ -857,7 +1027,10 @@ function setupHoverTips() {
   });
 
   document.addEventListener("focusin", (event) => {
-    const target = event.target instanceof Element ? event.target.closest("[data-tip]") : null;
+    const target =
+      event.target instanceof Element
+        ? event.target.closest("[data-tip]")
+        : null;
     if (!target) {
       hide();
       return;
@@ -880,8 +1053,14 @@ function applyTaskFontSize(value) {
   if (!Number.isFinite(size)) return;
   const clamped = Math.max(11, Math.min(28, Math.round(size)));
   const defaultSize = 14;
-  document.documentElement.style.setProperty("--task-font-size", `${clamped}px`);
-  document.documentElement.style.setProperty("--modal-font-size", `${clamped}px`);
+  document.documentElement.style.setProperty(
+    "--task-font-size",
+    `${clamped}px`,
+  );
+  document.documentElement.style.setProperty(
+    "--modal-font-size",
+    `${clamped}px`,
+  );
   if (els.settingsTaskFontSize) {
     els.settingsTaskFontSize.value = String(clamped);
   }
@@ -894,7 +1073,8 @@ function sortModeLabel(value) {
   if (value === "TaskName") return t("task_sort_name", "Task name");
   if (value === "CreateFirst") return t("task_sort_create", "Create first");
   if (value === "UpdateFirst") return t("task_sort_update", "Update first");
-  if (value === "CompleteFirst") return t("task_sort_complete", "Complete first");
+  if (value === "CompleteFirst")
+    return t("task_sort_complete", "Complete first");
   return t("task_sort_custom", "Custom");
 }
 
@@ -913,12 +1093,12 @@ function confirmCascadeMessage(nextState) {
   if (nextState === "Blocked") {
     return t(
       "confirm_block_descendants",
-      "Set all subtasks and nested subtasks to Blocked too?"
+      "Set all subtasks and nested subtasks to Blocked too?",
     );
   }
   return t(
     "confirm_complete_descendants",
-    "Set all subtasks and nested subtasks to Completed too?"
+    "Set all subtasks and nested subtasks to Completed too?",
   );
 }
 
@@ -949,9 +1129,12 @@ function renderToolbarSortMode() {
     (value) => {
       saveSortMode(value);
     },
-    sortDisplayLabel
+    sortDisplayLabel,
   );
-  setTip(els.toolbarSort.querySelector(".select-trigger"), t("task_sort", "Task Sort"));
+  setTip(
+    els.toolbarSort.querySelector(".select-trigger"),
+    t("task_sort", "Task Sort"),
+  );
 }
 
 function addModalTag(tag) {
@@ -1083,7 +1266,10 @@ function applyTheme(theme) {
   root.style.setProperty("--danger", theme.blocked_color);
   root.style.setProperty("--input-bg", theme.input_bg);
   root.style.setProperty("--chip-bg", theme.tag_bg || theme.highlight_bg);
-  root.style.setProperty("--chip-active", theme.tag_active_bg || theme.selection_bg);
+  root.style.setProperty(
+    "--chip-active",
+    theme.tag_active_bg || theme.selection_bg,
+  );
 
   const bg = (theme.primary_bg || "").replace("#", "");
   if (bg.length === 6) {
@@ -1135,7 +1321,8 @@ function updateTaskStateSegmentLabels() {
 }
 
 function applyTextInputAttributes() {
-  const activeLang = app.snapshot?.settings?.selected_language === "zh-CN" ? "zh-CN" : "en";
+  const activeLang =
+    app.snapshot?.settings?.selected_language === "zh-CN" ? "zh-CN" : "en";
   document.querySelectorAll("input[type='text'], textarea").forEach((field) => {
     field.setAttribute("lang", activeLang);
     field.setAttribute("inputmode", "text");
@@ -1148,8 +1335,11 @@ function applyTextInputAttributes() {
 
 function applyLocalizedText() {
   const duePrefix = t("due_none", "Due: None").split(/[:：]/)[0];
-  const completedPrefix = t("completed_none", "Completed: None").split(/[:：]/)[0];
-  const activeLang = app.snapshot?.settings?.selected_language === "zh-CN" ? "zh-CN" : "en";
+  const completedPrefix = t("completed_none", "Completed: None").split(
+    /[:：]/,
+  )[0];
+  const activeLang =
+    app.snapshot?.settings?.selected_language === "zh-CN" ? "zh-CN" : "en";
   document.documentElement.lang = activeLang;
   applyTextInputAttributes();
   document.getElementById("title-tasks").textContent = t("tasks", "Tasks");
@@ -1163,17 +1353,30 @@ function applyLocalizedText() {
   setTip(els.filterBtn, t("open_filter_help", "Open filters."));
   setTip(els.undoBtn, t("undo_help", "Undo latest change."));
 
-  document.getElementById("task-name-label").childNodes[0].textContent = `${t("task_name", "Task name")}\n`;
+  document.getElementById("task-name-label").childNodes[0].textContent =
+    `${t("task_name", "Task name")}\n`;
   document.getElementById("state-label").textContent = t("state", "State");
-  document.getElementById("urgency-label").textContent = t("urgency", "Urgency");
-  document.getElementById("importance-label").textContent = t("importance", "Importance");
+  document.getElementById("urgency-label").textContent = t(
+    "urgency",
+    "Urgency",
+  );
+  document.getElementById("importance-label").textContent = t(
+    "importance",
+    "Importance",
+  );
   document.getElementById("pinned-label").textContent = t("pinned", "Pinned");
   setPinnedValue(getPinnedValue());
-  document.getElementById("description-label").childNodes[0].textContent = `${t("description", "Description")}\n`;
-  document.getElementById("due-label").childNodes[0].textContent = `${duePrefix}\n`;
-  document.getElementById("completed-label").childNodes[0].textContent = `${completedPrefix}\n`;
+  document.getElementById("description-label").childNodes[0].textContent =
+    `${t("description", "Description")}\n`;
+  document.getElementById("due-label").childNodes[0].textContent =
+    `${duePrefix}\n`;
+  document.getElementById("completed-label").childNodes[0].textContent =
+    `${completedPrefix}\n`;
   document.getElementById("tags-label").textContent = t("tags", "Tags");
-  document.getElementById("quick-tags-label").textContent = t("quick_add", "Quick Add");
+  document.getElementById("quick-tags-label").textContent = t(
+    "quick_add",
+    "Quick Add",
+  );
   els.taskFormTagInput.placeholder = t("new_tag", "New tag");
   if (!els.taskFormDue.value) {
     els.taskFormDueOpen.textContent = t("none", "No time selected");
@@ -1192,50 +1395,87 @@ function applyLocalizedText() {
   els.summaryCloseFooterBtn.textContent = t("close", "Close");
   setTip(els.summaryCloseBtn, t("close_popup_help", "Close"));
 
-  document.getElementById("settings-title").textContent = t("settings", "Settings");
-  document.getElementById("settings-theme-label").textContent = t("theme", "Theme");
-  document.getElementById("settings-language-label").textContent = t("language", "Language");
-  document.getElementById("settings-optional-states-label").textContent =
-    t("optional_task_states", "Optional task states");
+  document.getElementById("settings-title").textContent = t(
+    "settings",
+    "Settings",
+  );
+  document.getElementById("settings-theme-label").textContent = t(
+    "theme",
+    "Theme",
+  );
+  document.getElementById("settings-language-label").textContent = t(
+    "language",
+    "Language",
+  );
+  document.getElementById("settings-optional-states-label").textContent = t(
+    "optional_task_states",
+    "Optional task states",
+  );
   document.getElementById("settings-auto-complete-parents-label").textContent =
     t("auto_complete_parent_tasks", "Auto complete parent tasks");
-  document.getElementById("settings-task-font-size-label").childNodes[0].textContent =
-    `${t("task_font_size", "Task Font Size")}\n`;
-  document.getElementById("settings-theme-path-label").childNodes[0].textContent =
+  document.getElementById(
+    "settings-task-font-size-label",
+  ).childNodes[0].textContent = `${t("task_font_size", "Task Font Size")}\n`;
+  document.getElementById(
+    "settings-theme-path-label",
+  ).childNodes[0].textContent =
     `${t("import_theme_path", "Import Theme Path")}\n`;
-  els.settingsThemeDefaultPath.textContent =
-    `${t("theme_default_path", "Theme path")}: ${app.snapshot?.theme_dir_path || "-"}`;
+  els.settingsThemeDefaultPath.textContent = `${t("theme_default_path", "Theme path")}: ${app.snapshot?.theme_dir_path || "-"}`;
   document.getElementById("settings-data-dir-label").childNodes[0].textContent =
     `${t("data_directory_path", "Data Directory Path")}\n`;
   document.getElementById("settings-ui-scale-label").childNodes[0].textContent =
     `${t("ui_scale", "UI Scale")}\n`;
   els.settingsImportBtn.textContent = t("import_theme", "Import Theme");
-  els.settingsLoadTaskbarBtn.textContent = t("load_taskbar_json", "Load taskbar.json");
+  els.settingsLoadTaskbarBtn.textContent = t(
+    "load_taskbar_json",
+    "Load taskbar.json",
+  );
   els.settingsSaveBtn.textContent = t("save", "Save");
   els.settingsDeleteDataBtn.textContent = t(
     "delete_all_data_exit",
-    "Delete all data and exit"
+    "Delete all data and exit",
   );
   setTip(els.settingsModalClose, t("close_settings_help", "Close settings"));
-  setTip(els.settingsImportBtn, t("import_theme_help", "Import theme from a TOML file path."));
+  setTip(
+    els.settingsImportBtn,
+    t("import_theme_help", "Import theme from a TOML file path."),
+  );
   setTip(
     els.settingsLoadTaskbarBtn,
-    t("load_taskbar_json_help", "Reload taskbar.json from the configured data directory.")
+    t(
+      "load_taskbar_json_help",
+      "Reload taskbar.json from the configured data directory.",
+    ),
   );
   setTip(els.settingsUiScale, t("ui_scale_help", "Adjust overall UI zoom."));
   setTip(els.settingsSaveBtn, t("save_settings_help", "Save settings"));
   setTip(
     els.settingsDeleteDataBtn,
-    t("delete_all_data_exit_help", "Delete all app data and quit immediately.")
+    t("delete_all_data_exit_help", "Delete all app data and quit immediately."),
   );
   els.dragDeleteZone.textContent = t("delete", "Delete");
   els.dragCancelZone.textContent = t("cancel_drag", "Cancel Drag");
 
-  document.getElementById("filter-title").textContent = t("filter_title", "Filter");
-  document.getElementById("filter-importance-label").textContent = t("importance", "Importance");
-  document.getElementById("filter-urgency-label").textContent = t("urgency", "Urgency");
-  document.getElementById("filter-state-label").textContent = t("state", "State");
-  document.getElementById("filter-pinned-label").textContent = t("pinned", "Pinned");
+  document.getElementById("filter-title").textContent = t(
+    "filter_title",
+    "Filter",
+  );
+  document.getElementById("filter-importance-label").textContent = t(
+    "importance",
+    "Importance",
+  );
+  document.getElementById("filter-urgency-label").textContent = t(
+    "urgency",
+    "Urgency",
+  );
+  document.getElementById("filter-state-label").textContent = t(
+    "state",
+    "State",
+  );
+  document.getElementById("filter-pinned-label").textContent = t(
+    "pinned",
+    "Pinned",
+  );
   document.getElementById("filter-tags-label").textContent = t("tags", "Tags");
   els.filterClearBtn.textContent = t("clear_all_filters", "Clear All");
   els.filterApplyBtn.textContent = t("confirm", "Confirm");
@@ -1244,10 +1484,16 @@ function applyLocalizedText() {
   setTip(els.filterApplyBtn, t("confirm_filters_help", "Apply filters"));
   setTip(els.taskFormDueOpen, t("set_due_time", "Set Due Time"));
   setTip(els.taskFormDueClear, t("clear", "Clear"));
-  setTip(els.taskFormCompletedOpen, t("set_completed_time", "Set Completed Time"));
+  setTip(
+    els.taskFormCompletedOpen,
+    t("set_completed_time", "Set Completed Time"),
+  );
   setTip(els.taskFormCompletedClear, t("clear", "Clear"));
 
-  document.getElementById("time-modal-title").textContent = t("set_due_time", "Set Time");
+  document.getElementById("time-modal-title").textContent = t(
+    "set_due_time",
+    "Set Time",
+  );
   document.getElementById("time-year-label").textContent = t("year", "Year");
   document.getElementById("time-month-label").textContent = t("month", "Month");
   document.getElementById("time-day-label").textContent = t("day", "Day");
@@ -1261,30 +1507,57 @@ function applyLocalizedText() {
   els.timeSuggestPlus15.textContent = t("time_plus_15", "15 mins later");
   els.timeSuggestTomorrow.textContent = t("time_tomorrow", "Tomorrow 9:00");
   setTip(els.timeSuggestNow, t("time_now_help", "Set to current time"));
-  setTip(els.timeSuggestTonight, t("time_tonight_help", "Set 21:00 (today/tomorrow)"));
+  setTip(
+    els.timeSuggestTonight,
+    t("time_tonight_help", "Set 21:00 (today/tomorrow)"),
+  );
   setTip(els.timeSuggestPlus15, t("time_plus_15_help", "Set now + 15 minutes"));
-  setTip(els.timeSuggestTomorrow, t("time_tomorrow_help", "Set tomorrow at 09:00"));
-  document.getElementById("recurring-label").textContent = t("recurring", "Recurring");
+  setTip(
+    els.timeSuggestTomorrow,
+    t("time_tomorrow_help", "Set tomorrow at 09:00"),
+  );
+  document.getElementById("recurring-label").textContent = t(
+    "recurring",
+    "Recurring",
+  );
   document.getElementById("recurring-repeat-label").childNodes[0].textContent =
     `${t("recurring_repeat", "Repeat")}\n`;
-  document.getElementById("recurring-due-time-label").childNodes[0].textContent =
-    `${t("recurring_due_time", "Due time")}\n`;
+  document.getElementById(
+    "recurring-due-time-label",
+  ).childNodes[0].textContent = `${t("recurring_due_time", "Due time")}\n`;
   els.taskFormRecurringCustomBtn.textContent = t("recurring_custom", "Custom");
-  document.getElementById("recurrence-custom-title").textContent =
-    t("recurrence_custom_title", "Custom Recurrence");
-  document.getElementById("recurrence-repeats-every-label").textContent =
-    t("recurrence_repeats_every", "Repeats every");
+  document.getElementById("recurrence-custom-title").textContent = t(
+    "recurrence_custom_title",
+    "Custom Recurrence",
+  );
+  document.getElementById("recurrence-repeats-every-label").textContent = t(
+    "recurrence_repeats_every",
+    "Repeats every",
+  );
   document.getElementById("recurrence-unit-label").childNodes[0].textContent =
     `${t("recurrence_unit", "Unit")}\n`;
-  document.getElementById("recurrence-ends-label").textContent = t("recurrence_ends", "Ends");
-  document.getElementById("recurrence-end-never-btn").textContent =
-    t("recurrence_end_never", "Never");
-  document.getElementById("recurrence-end-on-btn").textContent = t("recurrence_end_on", "On");
-  document.getElementById("recurrence-end-after-btn").textContent =
-    t("recurrence_end_after", "After");
-  document.getElementById("recurrence-on-date-label").childNodes[0].textContent =
-    `${t("recurrence_on_date", "On date")}\n`;
-  document.getElementById("recurrence-occurrences-label").childNodes[0].textContent =
+  document.getElementById("recurrence-ends-label").textContent = t(
+    "recurrence_ends",
+    "Ends",
+  );
+  document.getElementById("recurrence-end-never-btn").textContent = t(
+    "recurrence_end_never",
+    "Never",
+  );
+  document.getElementById("recurrence-end-on-btn").textContent = t(
+    "recurrence_end_on",
+    "On",
+  );
+  document.getElementById("recurrence-end-after-btn").textContent = t(
+    "recurrence_end_after",
+    "After",
+  );
+  document.getElementById(
+    "recurrence-on-date-label",
+  ).childNodes[0].textContent = `${t("recurrence_on_date", "On date")}\n`;
+  document.getElementById(
+    "recurrence-occurrences-label",
+  ).childNodes[0].textContent =
     `${t("recurrence_occurrences", "Occurrences")}\n`;
 
   updateTaskStateSegmentLabels();
@@ -1355,13 +1628,14 @@ function openTaskSummaryModal(taskId) {
   els.summaryStateRow.textContent = `${stateSymbol(task.state)} ${stateLabel(task.state)}`;
   const urgencyLabel = importanceValueLabel(task.urgency);
   const importanceLabel = importanceValueLabel(task.importance);
-  els.summaryPriorityRow.textContent =
-    `${t("urgency", "Urgency")}: ${urgencyLabel} | ${t("importance", "Importance")}: ${importanceLabel}`;
-  els.summaryDescriptionRow.textContent = task.description?.trim() || t("no_description", "No description");
+  els.summaryPriorityRow.textContent = `${t("urgency", "Urgency")}: ${urgencyLabel} | ${t("importance", "Importance")}: ${importanceLabel}`;
+  els.summaryDescriptionRow.textContent =
+    task.description?.trim() || t("no_description", "No description");
   const tags = (task.tags || []).join(", ");
-  els.summaryTagsRow.textContent = tags ? `${t("tags", "Tags")}: ${tags}` : `${t("tags", "Tags")}: ${t("none", "None")}`;
-  els.summaryTimesRow.textContent =
-    `${t("created_at", "Created at")}: ${formatDateTime(task.times?.created_at)} | ${t("updated_at", "Updated at")}: ${formatDateTime(task.times?.updated_at)}`;
+  els.summaryTagsRow.textContent = tags
+    ? `${t("tags", "Tags")}: ${tags}`
+    : `${t("tags", "Tags")}: ${t("none", "None")}`;
+  els.summaryTimesRow.textContent = `${t("created_at", "Created at")}: ${formatDateTime(task.times?.created_at)} | ${t("updated_at", "Updated at")}: ${formatDateTime(task.times?.updated_at)}`;
   els.summaryModal.showModal();
 }
 
@@ -1370,8 +1644,15 @@ async function saveTaskFromModal() {
   const nextState = getSegmentedValue(els.taskFormState) || "Todo";
   let cascadeDescendants = false;
   if (app.modalMode === "edit" && app.modalTaskId != null) {
-    const existingTask = findTaskById(app.snapshot?.tasks || [], app.modalTaskId);
-    if (existingTask && existingTask.state !== nextState && shouldConfirmCascade(existingTask, nextState)) {
+    const existingTask = findTaskById(
+      app.snapshot?.tasks || [],
+      app.modalTaskId,
+    );
+    if (
+      existingTask &&
+      existingTask.state !== nextState &&
+      shouldConfirmCascade(existingTask, nextState)
+    ) {
       cascadeDescendants = window.confirm(confirmCascadeMessage(nextState));
     }
   }
@@ -1393,7 +1674,11 @@ async function saveTaskFromModal() {
     const id = await invokeCreateTask(app.modalParentId, draft);
     app.selectedId = id;
   } else if (app.modalMode === "edit" && app.modalTaskId != null) {
-    await invokeUpdateTaskWithOptions(app.modalTaskId, draft, cascadeDescendants);
+    await invokeUpdateTaskWithOptions(
+      app.modalTaskId,
+      draft,
+      cascadeDescendants,
+    );
     app.selectedId = app.modalTaskId;
   }
 
@@ -1408,7 +1693,7 @@ async function deleteTaskFromModal() {
   if (!task) return;
   const confirmed = await askConfirmation(
     t("delete", "Delete"),
-    t("delete_task_confirm_named", `Delete '${task.name}'?`)
+    t("delete_task_confirm_named", `Delete '${task.name}'?`),
   );
   if (!confirmed) return;
 
@@ -1460,36 +1745,71 @@ function renderFilterButtons() {
   renderFilterOptionButtons(
     els.filterImportanceButtons,
     [
-      { value: "High", label: t("high", "High"), tip: t("filter_high_importance", "High importance") },
-      { value: "Low", label: t("low", "Low"), tip: t("filter_low_importance", "Low importance") },
-      { value: "None", label: t("none", "None"), tip: t("filter_no_importance", "No importance") },
+      {
+        value: "High",
+        label: t("high", "High"),
+        tip: t("filter_high_importance", "High importance"),
+      },
+      {
+        value: "Low",
+        label: t("low", "Low"),
+        tip: t("filter_low_importance", "Low importance"),
+      },
+      {
+        value: "None",
+        label: t("none", "None"),
+        tip: t("filter_no_importance", "No importance"),
+      },
     ],
-    app.draftFilter.importance
+    app.draftFilter.importance,
   );
 
   renderFilterOptionButtons(
     els.filterUrgencyButtons,
     [
-      { value: "High", label: t("high", "High"), tip: t("filter_high_urgency", "High urgency") },
-      { value: "Low", label: t("low", "Low"), tip: t("filter_low_urgency", "Low urgency") },
-      { value: "None", label: t("none", "None"), tip: t("filter_no_urgency", "No urgency") },
+      {
+        value: "High",
+        label: t("high", "High"),
+        tip: t("filter_high_urgency", "High urgency"),
+      },
+      {
+        value: "Low",
+        label: t("low", "Low"),
+        tip: t("filter_low_urgency", "Low urgency"),
+      },
+      {
+        value: "None",
+        label: t("none", "None"),
+        tip: t("filter_no_urgency", "No urgency"),
+      },
     ],
-    app.draftFilter.urgency
+    app.draftFilter.urgency,
   );
 
   renderFilterOptionButtons(
     els.filterStateButtons,
-    availableSelectableTaskStates().map((value) => ({ value, label: stateLabel(value) })),
-    app.draftFilter.state
+    availableSelectableTaskStates().map((value) => ({
+      value,
+      label: stateLabel(value),
+    })),
+    app.draftFilter.state,
   );
 
   renderFilterOptionButtons(
     els.filterPinnedButtons,
     [
-      { value: "Pinned", label: t("pinned_filter", "Pinned"), tip: t("filter_pinned", "Pinned only") },
-      { value: "Unpinned", label: t("unpinned", "Unpinned"), tip: t("filter_unpinned", "Unpinned only") },
+      {
+        value: "Pinned",
+        label: t("pinned_filter", "Pinned"),
+        tip: t("filter_pinned", "Pinned only"),
+      },
+      {
+        value: "Unpinned",
+        label: t("unpinned", "Unpinned"),
+        tip: t("filter_unpinned", "Unpinned only"),
+      },
     ],
-    app.draftFilter.pinned
+    app.draftFilter.pinned,
   );
 }
 
@@ -1535,16 +1855,21 @@ function openSettingsModal() {
   const themes = app.snapshot.available_themes || [];
   const languages = app.snapshot.available_languages || [];
 
-  renderSelectList(els.settingsTheme, themes, settings.selected_theme, (value) => {
-    if (value === "dark") return t("theme_dark", "Dark");
-    if (value === "light") return t("theme_light", "Light");
-    return value;
-  });
+  renderSelectList(
+    els.settingsTheme,
+    themes,
+    settings.selected_theme,
+    (value) => {
+      if (value === "dark") return t("theme_dark", "Dark");
+      if (value === "light") return t("theme_light", "Light");
+      return value;
+    },
+  );
   renderSelectList(
     els.settingsLanguage,
     languages.map((item) => item.code),
     settings.selected_language,
-    (code) => languages.find((item) => item.code === code)?.label || code
+    (code) => languages.find((item) => item.code === code)?.label || code,
   );
   const optionalStates = new Set(settings.enabled_optional_states || []);
   els.settingsOptionalStates.innerHTML = "";
@@ -1559,7 +1884,8 @@ function openSettingsModal() {
     });
     els.settingsOptionalStates.append(btn);
   }
-  els.settingsAutoCompleteParents.checked = settings.auto_complete_parent_tasks !== false;
+  els.settingsAutoCompleteParents.checked =
+    settings.auto_complete_parent_tasks !== false;
   els.settingsTaskFontSize.value = String(settings.task_font_size ?? 14);
   applyTaskFontSize(settings.task_font_size ?? 14);
   applyUiScale(settings.ui_scale ?? 1.0);
@@ -1570,18 +1896,26 @@ function openSettingsModal() {
 }
 
 async function saveSettings() {
-  const enabledOptionalStates = [...els.settingsOptionalStates.querySelectorAll("button.active")]
+  const enabledOptionalStates = [
+    ...els.settingsOptionalStates.querySelectorAll("button.active"),
+  ]
     .map((btn) => btn.dataset.value)
     .filter(Boolean);
   const settings = {
-    selected_theme: getSelectListValue(els.settingsTheme) || app.snapshot?.settings?.selected_theme,
+    selected_theme:
+      getSelectListValue(els.settingsTheme) ||
+      app.snapshot?.settings?.selected_theme,
     task_font_size: Number(els.settingsTaskFontSize.value || 14),
-    selected_language: getSelectListValue(els.settingsLanguage) || app.snapshot?.settings?.selected_language,
+    selected_language:
+      getSelectListValue(els.settingsLanguage) ||
+      app.snapshot?.settings?.selected_language,
     task_sort_mode: app.snapshot?.settings?.task_sort_mode || "Custom",
     enabled_optional_states: enabledOptionalStates,
     auto_complete_parent_tasks: els.settingsAutoCompleteParents.checked,
     task_data_directory:
-      (els.settingsDataDir.value || "").trim() || app.snapshot?.settings?.task_data_directory || "",
+      (els.settingsDataDir.value || "").trim() ||
+      app.snapshot?.settings?.task_data_directory ||
+      "",
     ui_scale: Number(els.settingsUiScale.value || 1),
   };
 
@@ -1608,24 +1942,63 @@ async function loadTaskbarFromCurrentDirectory() {
   await safeInvoke("reload_taskbar_file");
   await refresh();
 }
-
+/*
 async function deleteAllDataAndExit() {
   const firstConfirm = await askConfirmation(
-    t("confirm_delete_data_title", "Are you sure you want to delete all application data?"),
-    t("confirm_delete_data_hint", "This will remove settings, tasks, themes, and cache.")
+    t(
+      "confirm_delete_data_title",
+      "Are you sure you want to delete all application data?",
+    ),
+    t(
+      "confirm_delete_data_hint",
+      "This will remove settings, tasks, themes, and cache.",
+    ),
   );
   if (!firstConfirm) return;
 
   const secondConfirm = await askConfirmation(
     t("confirm_delete_data_second_title", "Final confirmation"),
     t("confirm_delete_data_body", "This action cannot be undone."),
-    t("confirm_delete_data_btn", "Delete all and exit")
+    t("confirm_delete_data_btn", "Delete all and exit"),
   );
   if (!secondConfirm) return;
 
   await safeInvoke("delete_all_data_and_exit");
 }
+*/
+async function deleteAllDataAndExit() {
+  console.log("[cleanup][js] entered deleteAllDataAndExit");
 
+  const firstConfirm = await askConfirmation(
+    t(
+      "confirm_delete_data_title",
+      "Are you sure you want to delete all application data?",
+    ),
+    t(
+      "confirm_delete_data_hint",
+      "This will remove settings, tasks, themes, and cache.",
+    ),
+  );
+  console.log("[cleanup][js] firstConfirm =", firstConfirm);
+  if (!firstConfirm) return;
+
+  const secondConfirm = await askConfirmation(
+    t("confirm_delete_data_second_title", "Final confirmation"),
+    t("confirm_delete_data_body", "This action cannot be undone."),
+    t("confirm_delete_data_btn", "Delete all and exit"),
+  );
+  console.log("[cleanup][js] secondConfirm =", secondConfirm);
+  if (!secondConfirm) return;
+
+  console.log("[cleanup][js] before safeInvoke(delete_all_data_and_exit)");
+  try {
+    const result = await safeInvoke("delete_all_data_and_exit");
+    console.log("[cleanup][js] safeInvoke success:", result);
+  } catch (err) {
+    console.error("[cleanup][js] safeInvoke failed:", err);
+  }
+  console.log("[cleanup][js] after safeInvoke(delete_all_data_and_exit)");
+}
 function createStripe(color, tip = "") {
   const stripe = document.createElement("div");
   stripe.className = "stripe";
@@ -1635,13 +2008,22 @@ function createStripe(color, tip = "") {
 }
 
 function closeAllStateMenus() {
-  document.querySelectorAll(".state-wrap.open").forEach((el) => el.classList.remove("open"));
+  document
+    .querySelectorAll(".state-wrap.open")
+    .forEach((el) => el.classList.remove("open"));
 }
 
 function renderTaskRow(task, depth, parentId = 0) {
   const depthLevel = Math.min(depth, 4);
   const li = document.createElement("li");
-  li.className = `task-item task-level-${depthLevel} ${app.selectedId === task.id ? "selected" : ""}`;
+  li.className = [
+    "task-item",
+    `task-level-${depthLevel}`,
+    app.selectedId === task.id ? "selected" : "",
+    task.pinned ? "pinned" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   li.dataset.depth = String(depthLevel);
   li.dataset.id = String(task.id);
   li.dataset.parentId = String(parentId);
@@ -1699,7 +2081,10 @@ function renderTaskRow(task, depth, parentId = 0) {
   const divider = document.createElement("hr");
   divider.className = "state-divider";
   stateMenu.append(divider);
-  const stateItems = availableSelectableTaskStates().map((value) => [value, stateLabel(value)]);
+  const stateItems = availableSelectableTaskStates().map((value) => [
+    value,
+    stateLabel(value),
+  ]);
 
   for (const [value, label] of stateItems) {
     const item = document.createElement("button");
@@ -1737,30 +2122,30 @@ function renderTaskRow(task, depth, parentId = 0) {
     stripes.append(
       createStripe(
         palette?.importance_high_stripe || "#DB4B4B",
-        t("stripe_importance_high", "High importance")
-      )
+        t("stripe_importance_high", "High importance"),
+      ),
     );
   } else if (task.importance === "Low") {
     stripes.append(
       createStripe(
         palette?.importance_low_stripe || "#48BF63",
-        t("stripe_importance_low", "Low importance")
-      )
+        t("stripe_importance_low", "Low importance"),
+      ),
     );
   }
   if (task.urgency === "High") {
     stripes.append(
       createStripe(
         palette?.urgency_high_stripe || "#EA8A2B",
-        t("stripe_urgency_high", "High urgency")
-      )
+        t("stripe_urgency_high", "High urgency"),
+      ),
     );
   } else if (task.urgency === "Low") {
     stripes.append(
       createStripe(
         palette?.urgency_low_stripe || "#6AD3FA",
-        t("stripe_urgency_low", "Low urgency")
-      )
+        t("stripe_urgency_low", "Low urgency"),
+      ),
     );
   }
 
@@ -1788,11 +2173,18 @@ function renderTaskRow(task, depth, parentId = 0) {
     title.append(descSpan);
   }
 
-  if (task.state !== "Completed" && task.state !== "Blocked" && task.times?.due_date) {
+  if (
+    task.state !== "Completed" &&
+    task.state !== "Blocked" &&
+    task.times?.due_date
+  ) {
     const dueSpan = document.createElement("span");
     dueSpan.className = "task-due";
     dueSpan.textContent = formatDueShort(task.times.due_date);
-    setTip(dueSpan, `${t("due_none", "Due").split(/[:：]/)[0]}: ${formatDateTime(task.times.due_date)}`);
+    setTip(
+      dueSpan,
+      `${t("due_none", "Due").split(/[:：]/)[0]}: ${formatDateTime(task.times.due_date)}`,
+    );
     title.append(dueSpan);
   }
   title.addEventListener("click", () => {
@@ -1813,7 +2205,10 @@ function renderTaskRow(task, depth, parentId = 0) {
 
   const star = document.createElement("button");
   star.textContent = task.pinned ? "★" : "☆";
-  setTip(star, task.pinned ? t("filter_unpinned", "Unpin") : t("filter_pinned", "Pin"));
+  setTip(
+    star,
+    task.pinned ? t("filter_unpinned", "Unpin") : t("filter_pinned", "Pin"),
+  );
   star.addEventListener("click", async () => {
     await safeInvoke("toggle_task_pinned", { id: task.id });
     await refresh();
@@ -1871,9 +2266,13 @@ function renderTaskList() {
 }
 
 function clearDragHighlights() {
-  document.querySelectorAll(".task-item.drop-before, .task-item.drop-after, .task-item.drop-child").forEach((node) => {
-    node.classList.remove("drop-before", "drop-after", "drop-child");
-  });
+  document
+    .querySelectorAll(
+      ".task-item.drop-before, .task-item.drop-after, .task-item.drop-child",
+    )
+    .forEach((node) => {
+      node.classList.remove("drop-before", "drop-after", "drop-child");
+    });
   els.taskList.classList.remove("drop-root");
 }
 
@@ -1900,7 +2299,10 @@ function updateAutoScroll(clientY) {
   app.drag.autoScrollTimer = setInterval(() => {
     const max = els.taskBoard.scrollHeight - els.taskBoard.clientHeight;
     if (max > 0) {
-      els.taskBoard.scrollTop = Math.max(0, Math.min(max, els.taskBoard.scrollTop + delta));
+      els.taskBoard.scrollTop = Math.max(
+        0,
+        Math.min(max, els.taskBoard.scrollTop + delta),
+      );
     } else {
       window.scrollBy(0, delta);
     }
@@ -1942,7 +2344,11 @@ async function commitDrop() {
     } else if (app.drag.zone === "cancel") {
       return;
     } else if (app.drag.proposal) {
-      await invokeMoveTask(app.drag.taskId, app.drag.proposal.targetId, app.drag.proposal.relation);
+      await invokeMoveTask(
+        app.drag.taskId,
+        app.drag.proposal.targetId,
+        app.drag.proposal.relation,
+      );
     }
   } finally {
     finishDragState();
@@ -2003,11 +2409,19 @@ function updateDropProposalFromPointer(clientX, clientY) {
 
 function createDragGhostFromTaskItem(li) {
   const ghost = li.cloneNode(true);
-  ghost.classList.remove("dragging", "selected", "drop-before", "drop-after", "drop-child");
+  ghost.classList.remove(
+    "dragging",
+    "selected",
+    "drop-before",
+    "drop-after",
+    "drop-child",
+  );
   ghost.classList.add("drag-ghost");
-  ghost.querySelectorAll(".state-wrap.open, .select-list.open").forEach((node) => {
-    node.classList.remove("open");
-  });
+  ghost
+    .querySelectorAll(".state-wrap.open, .select-list.open")
+    .forEach((node) => {
+      node.classList.remove("open");
+    });
   return ghost;
 }
 
@@ -2076,7 +2490,11 @@ function setupDatePickerGuard() {
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     const active = document.activeElement;
-    if (active && active.tagName === "INPUT" && active.type === "datetime-local") {
+    if (
+      active &&
+      active.tagName === "INPUT" &&
+      active.type === "datetime-local"
+    ) {
       active.blur();
     }
   });
@@ -2094,18 +2512,22 @@ function setupDatePickerGuard() {
         active.blur();
       }
     },
-    true
+    true,
   );
 
   document.addEventListener(
     "change",
     (event) => {
       const target = event.target;
-      if (target && target.tagName === "INPUT" && target.type === "datetime-local") {
+      if (
+        target &&
+        target.tagName === "INPUT" &&
+        target.type === "datetime-local"
+      ) {
         target.blur();
       }
     },
-    true
+    true,
   );
 }
 
@@ -2128,14 +2550,19 @@ async function refresh() {
 }
 
 document.addEventListener("pointerdown", (event) => {
-  if (!(event.target instanceof Element) || !event.target.closest(".state-wrap")) {
+  if (
+    !(event.target instanceof Element) ||
+    !event.target.closest(".state-wrap")
+  ) {
     closeAllStateMenus();
   }
   if (!(event.target instanceof Element)) {
     return;
   }
   if (!event.target.closest(".select-list")) {
-    document.querySelectorAll(".select-list.open").forEach((node) => node.classList.remove("open"));
+    document
+      .querySelectorAll(".select-list.open")
+      .forEach((node) => node.classList.remove("open"));
   }
 });
 
@@ -2178,7 +2605,9 @@ els.taskModalCancel.addEventListener("click", () => els.taskModal.close());
 els.taskModalSave.addEventListener("click", saveTaskFromModal);
 els.taskModalDelete.addEventListener("click", deleteTaskFromModal);
 els.summaryCloseBtn.addEventListener("click", () => els.summaryModal.close());
-els.summaryCloseFooterBtn.addEventListener("click", () => els.summaryModal.close());
+els.summaryCloseFooterBtn.addEventListener("click", () =>
+  els.summaryModal.close(),
+);
 els.summaryOpenDetailBtn.addEventListener("click", () => {
   if (app.summaryTaskId == null) return;
   const id = app.summaryTaskId;
@@ -2211,7 +2640,9 @@ els.taskFormDueClear.addEventListener("click", () => {
   els.taskFormDue.value = "";
   updateTimeButtons();
 });
-els.taskFormCompletedOpen.addEventListener("click", () => openTimeModal("completed"));
+els.taskFormCompletedOpen.addEventListener("click", () =>
+  openTimeModal("completed"),
+);
 els.taskFormCompletedClear.addEventListener("click", () => {
   els.taskFormCompleted.value = "";
   updateTimeButtons();
@@ -2226,14 +2657,21 @@ els.taskFormRecurringToggle.addEventListener("click", () => {
 });
 els.taskFormRecurringCustomBtn.addEventListener("click", () => {
   if (!app.recurrenceDraft) app.recurrenceDraft = defaultRecurrenceDraft();
-  app.recurrenceDraft.frequency = getSelectListValue(els.taskFormRecurringFrequency) || "Custom";
+  app.recurrenceDraft.frequency =
+    getSelectListValue(els.taskFormRecurringFrequency) || "Custom";
   openRecurrenceModal();
 });
 
 els.timeSuggestNow.addEventListener("click", () => applySuggestion("now"));
-els.timeSuggestTonight.addEventListener("click", () => applySuggestion("tonight"));
-els.timeSuggestPlus15.addEventListener("click", () => applySuggestion("plus15"));
-els.timeSuggestTomorrow.addEventListener("click", () => applySuggestion("tomorrow"));
+els.timeSuggestTonight.addEventListener("click", () =>
+  applySuggestion("tonight"),
+);
+els.timeSuggestPlus15.addEventListener("click", () =>
+  applySuggestion("plus15"),
+);
+els.timeSuggestTomorrow.addEventListener("click", () =>
+  applySuggestion("tomorrow"),
+);
 els.timeModalClose.addEventListener("click", () => els.timeModal.close());
 els.timeModalCancel.addEventListener("click", () => els.timeModal.close());
 els.timeModalSave.addEventListener("click", () => {
@@ -2256,8 +2694,12 @@ els.timeModal.addEventListener("close", () => {
   app.timeEditingField = null;
 });
 
-els.recurrenceModalClose.addEventListener("click", () => els.recurrenceModal.close());
-els.recurrenceModalCancel.addEventListener("click", () => els.recurrenceModal.close());
+els.recurrenceModalClose.addEventListener("click", () =>
+  els.recurrenceModal.close(),
+);
+els.recurrenceModalCancel.addEventListener("click", () =>
+  els.recurrenceModal.close(),
+);
 els.recurrenceModalSave.addEventListener("click", () => {
   if (!app.recurrenceDraft) app.recurrenceDraft = defaultRecurrenceDraft();
   const mode = getSegmentedValue(els.recurrenceEndMode) || "Never";
@@ -2273,11 +2715,18 @@ els.recurrenceModalSave.addEventListener("click", () => {
   els.recurrenceModal.close();
 });
 
-els.settingsModalClose.addEventListener("click", () => els.settingsModal.close());
+els.settingsModalClose.addEventListener("click", () =>
+  els.settingsModal.close(),
+);
 els.settingsSaveBtn.addEventListener("click", saveSettings);
 els.settingsImportBtn.addEventListener("click", importTheme);
-els.settingsLoadTaskbarBtn.addEventListener("click", loadTaskbarFromCurrentDirectory);
+els.settingsLoadTaskbarBtn.addEventListener(
+  "click",
+  loadTaskbarFromCurrentDirectory,
+);
+
 els.settingsDeleteDataBtn.addEventListener("click", deleteAllDataAndExit);
+
 els.settingsTaskFontSize.addEventListener("input", () => {
   applyTaskFontSize(els.settingsTaskFontSize.value);
 });
@@ -2296,7 +2745,9 @@ wireSegmentedGroup(els.taskFormState);
 wireSegmentedGroup(els.taskFormUrgency);
 wireSegmentedGroup(els.taskFormImportance);
 wireSegmentedGroup(els.recurrenceEndMode);
-for (const btn of els.recurrenceEndMode.querySelectorAll("button[data-value]")) {
+for (const btn of els.recurrenceEndMode.querySelectorAll(
+  "button[data-value]",
+)) {
   btn.addEventListener("click", syncRecurrenceEndInputs);
 }
 els.taskFormPinned.addEventListener("click", () => {
