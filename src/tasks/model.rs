@@ -266,34 +266,32 @@ impl Task {
     }
 
     pub fn sort_subtasks_with_mode(&mut self, mode: &TaskSortMode) {
-        self.subtasks.sort_by(|a, b| {
-            match mode {
-                TaskSortMode::Custom => a
-                    .custom_order
-                    .cmp(&b.custom_order)
-                    .then_with(|| Self::cmp_old_like(a, b)),
-                TaskSortMode::TaskName => a
-                    .name
-                    .to_lowercase()
-                    .cmp(&b.name.to_lowercase())
-                    .then_with(|| Self::cmp_old_like(a, b)),
-                TaskSortMode::CreateFirst => a
-                    .times
-                    .created_at
-                    .cmp(&b.times.created_at)
-                    .then_with(|| Self::cmp_old_like(a, b)),
-                TaskSortMode::UpdateFirst => a
-                    .times
-                    .updated_at
-                    .cmp(&b.times.updated_at)
-                    .then_with(|| Self::cmp_old_like(a, b)),
-                TaskSortMode::CompleteFirst => match (a.times.completed_at, b.times.completed_at) {
-                    (Some(a_at), Some(b_at)) => a_at.cmp(&b_at).then_with(|| Self::cmp_old_like(a, b)),
-                    (Some(_), None) => std::cmp::Ordering::Less,
-                    (None, Some(_)) => std::cmp::Ordering::Greater,
-                    (None, None) => Self::cmp_old_like(a, b),
-                },
-            }
+        self.subtasks.sort_by(|a, b| match mode {
+            TaskSortMode::Custom => a
+                .custom_order
+                .cmp(&b.custom_order)
+                .then_with(|| Self::cmp_old_like(a, b)),
+            TaskSortMode::TaskName => a
+                .name
+                .to_lowercase()
+                .cmp(&b.name.to_lowercase())
+                .then_with(|| Self::cmp_old_like(a, b)),
+            TaskSortMode::CreateFirst => a
+                .times
+                .created_at
+                .cmp(&b.times.created_at)
+                .then_with(|| Self::cmp_old_like(a, b)),
+            TaskSortMode::UpdateFirst => a
+                .times
+                .updated_at
+                .cmp(&b.times.updated_at)
+                .then_with(|| Self::cmp_old_like(a, b)),
+            TaskSortMode::CompleteFirst => match (a.times.completed_at, b.times.completed_at) {
+                (Some(a_at), Some(b_at)) => a_at.cmp(&b_at).then_with(|| Self::cmp_old_like(a, b)),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => Self::cmp_old_like(a, b),
+            },
         });
     }
 

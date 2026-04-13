@@ -1,10 +1,15 @@
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, State};
 
-use crate::app::runtime::{initialize_runtime, persist_manager};
+use crate::app::runtime::{
+    ensure_taskbar_file, initialize_runtime, load_or_initialize_manager, persist_manager,
+    taskbar_path_from_settings,
+};
+use crate::files::load_taskbar;
 use crate::gui::settings::{
     apply_saved_theme, available_theme_names, import_theme_file, load_theme_palette,
     save_gui_settings, GuiSettings, ThemePalette,
@@ -14,7 +19,7 @@ use crate::tasks::{Task, TaskDraft, TaskManager, TaskSortMode, TaskState};
 
 struct SharedState {
     manager: Mutex<TaskManager>,
-    taskbar_path: PathBuf,
+    taskbar_path: Mutex<PathBuf>,
     settings: Mutex<GuiSettings>,
 }
 
@@ -27,6 +32,8 @@ struct AppSnapshot {
     available_themes: Vec<String>,
     common_tags: Vec<String>,
     active_theme: ThemePalette,
+    can_undo: bool,
+    theme_dir_path: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,6 +58,22 @@ enum MoveRelation {
 
 fn current_theme_or_default() -> Result<ThemePalette, String> {
     apply_saved_theme().or_else(|_| load_theme_palette("dark"))
+}
+
+fn current_taskbar_path(state: &State<'_, SharedState>) -> Result<PathBuf, String> {
+    state
+        .taskbar_path
+        .lock()
+        .map_err(|_| "Failed to lock taskbar path state".to_string())
+        .map(|path| path.clone())
+}
+
+fn persist_current_manager(
+    state: &State<'_, SharedState>,
+    manager: &TaskManager,
+) -> Result<(), String> {
+    let path = current_taskbar_path(state)?;
+    persist_manager(path.as_path(), manager)
 }
 
 #[cfg(target_os = "linux")]
@@ -94,7 +117,7 @@ fn load_app_state(state: State<'_, SharedState>) -> Result<AppSnapshot, String> 
         manager.apply_parent_completion_rollups();
     }
     manager.sort_for_mode(&settings.task_sort_mode);
-    persist_manager(&state.taskbar_path, &manager)?;
+    persist_current_manager(&state, &manager)?;
     set_current_language(selected_language);
 
     Ok(AppSnapshot {
@@ -105,15 +128,22 @@ fn load_app_state(state: State<'_, SharedState>) -> Result<AppSnapshot, String> 
             .into_iter()
             .map(|language| LanguageOption {
                 code: language.code().to_string(),
-                label: text_for(selected_language, match language {
-                    AppLanguage::English => "language_english",
-                    AppLanguage::ChineseSimplified => "language_chinese",
-                }),
+                label: text_for(
+                    selected_language,
+                    match language {
+                        AppLanguage::English => "language_english",
+                        AppLanguage::ChineseSimplified => "language_chinese",
+                    },
+                ),
             })
             .collect(),
         available_themes: available_theme_names().unwrap_or_else(|_| vec!["dark".to_string()]),
         common_tags: manager.most_common_tags(16),
         active_theme: current_theme_or_default()?,
+        can_undo: manager.can_undo(),
+        theme_dir_path: crate::app_paths::themes_dir()
+            .map(|path| path.display().to_string())
+            .unwrap_or_default(),
     })
 }
 
@@ -152,7 +182,7 @@ fn move_task(
     }
     manager.sort_for_mode(&TaskSortMode::Custom);
 
-    persist_manager(&state.taskbar_path, &manager)
+    persist_current_manager(&state, &manager)
 }
 
 #[tauri::command]
@@ -174,7 +204,7 @@ fn create_task(
 
     let id = manager.create_task_from_draft(parent_id, draft)?;
     manager.sort_for_mode(&sort_mode);
-    persist_manager(&state.taskbar_path, &manager)?;
+    persist_current_manager(&state, &manager)?;
     Ok(id)
 }
 
@@ -193,7 +223,7 @@ fn update_task(state: State<'_, SharedState>, id: u32, draft: TaskDraft) -> Resu
 
     manager.update_task_from_draft(id, draft)?;
     manager.sort_for_mode(&sort_mode);
-    persist_manager(&state.taskbar_path, &manager)
+    persist_current_manager(&state, &manager)
 }
 
 #[tauri::command]
@@ -212,7 +242,7 @@ fn delete_task(state: State<'_, SharedState>, id: u32) -> Result<(), String> {
     if auto_complete_parent_tasks {
         manager.apply_parent_completion_rollups();
     }
-    persist_manager(&state.taskbar_path, &manager)
+    persist_current_manager(&state, &manager)
 }
 
 #[tauri::command]
@@ -230,7 +260,7 @@ fn toggle_task_pinned(state: State<'_, SharedState>, id: u32) -> Result<(), Stri
 
     manager.toggle_task_pinned(id)?;
     manager.sort_for_mode(&sort_mode);
-    persist_manager(&state.taskbar_path, &manager)
+    persist_current_manager(&state, &manager)
 }
 
 #[tauri::command]
@@ -257,7 +287,7 @@ fn set_task_state(
         settings.auto_complete_parent_tasks,
     )?;
     manager.sort_for_mode(&settings.task_sort_mode);
-    persist_manager(&state.taskbar_path, &manager)
+    persist_current_manager(&state, &manager)
 }
 
 #[tauri::command]
@@ -284,7 +314,7 @@ fn update_task_with_options(
         settings.auto_complete_parent_tasks,
     )?;
     manager.sort_for_mode(&settings.task_sort_mode);
-    persist_manager(&state.taskbar_path, &manager)
+    persist_current_manager(&state, &manager)
 }
 
 #[tauri::command]
@@ -295,7 +325,7 @@ fn clear_all_tasks(state: State<'_, SharedState>) -> Result<(), String> {
         .map_err(|_| "Failed to lock task manager state".to_string())?;
 
     manager.clear_tasks();
-    persist_manager(&state.taskbar_path, &manager)
+    persist_current_manager(&state, &manager)
 }
 
 #[tauri::command]
@@ -306,7 +336,7 @@ fn undo_last_change(state: State<'_, SharedState>) -> Result<(), String> {
         .map_err(|_| "Failed to lock task manager state".to_string())?;
 
     manager.undo_last_change()?;
-    persist_manager(&state.taskbar_path, &manager)
+    persist_current_manager(&state, &manager)
 }
 
 #[tauri::command]
@@ -314,28 +344,53 @@ fn save_gui_settings_cmd(
     state: State<'_, SharedState>,
     settings: GuiSettings,
 ) -> Result<GuiSettings, String> {
+    let previous_settings = state
+        .settings
+        .lock()
+        .map_err(|_| "Failed to lock GUI settings state".to_string())?
+        .clone();
     save_gui_settings(&settings)?;
+    let persisted_settings = crate::gui::settings::load_gui_settings();
+    let previous_path = taskbar_path_from_settings(&previous_settings);
+    let new_path = taskbar_path_from_settings(&persisted_settings);
 
     {
         let mut manager = state
             .manager
             .lock()
             .map_err(|_| "Failed to lock task manager state".to_string())?;
-        if settings.auto_complete_parent_tasks {
+        if previous_path != new_path {
+            ensure_taskbar_file(new_path.as_path())?;
+            *manager = load_or_initialize_manager(new_path.as_path());
+        }
+        if persisted_settings.auto_complete_parent_tasks {
             manager.apply_parent_completion_rollups();
         }
-        manager.sort_for_mode(&settings.task_sort_mode);
-        persist_manager(&state.taskbar_path, &manager)?;
+        manager.sort_for_mode(&persisted_settings.task_sort_mode);
     }
 
+    {
+        let mut shared_path = state
+            .taskbar_path
+            .lock()
+            .map_err(|_| "Failed to lock taskbar path state".to_string())?;
+        *shared_path = new_path;
+    }
+    {
+        let manager = state
+            .manager
+            .lock()
+            .map_err(|_| "Failed to lock task manager state".to_string())?;
+        persist_current_manager(&state, &manager)?;
+    }
     let mut shared_settings = state
         .settings
         .lock()
         .map_err(|_| "Failed to lock GUI settings state".to_string())?;
-    *shared_settings = settings.clone();
-    set_current_language(settings.selected_language);
+    *shared_settings = persisted_settings.clone();
+    set_current_language(persisted_settings.selected_language);
 
-    Ok(settings)
+    Ok(persisted_settings)
 }
 
 #[tauri::command]
@@ -369,17 +424,106 @@ fn import_theme_file_cmd(state: State<'_, SharedState>, path: String) -> Result<
     Ok(theme_name)
 }
 
+#[tauri::command]
+fn delete_all_data_and_exit(app_handle: AppHandle) -> Result<(), String> {
+    fn shell_quote_posix(value: &str) -> String {
+        let escaped = value.replace('\'', r"'\''");
+        format!("'{escaped}'")
+    }
+
+    #[cfg(target_os = "windows")]
+    fn shell_quote_powershell(value: &str) -> String {
+        value.replace('\'', "''")
+    }
+
+    fn schedule_delete_after_exit(path: &Path) -> Result<(), String> {
+        let path_str = path.to_string_lossy().to_string();
+        if path_str.trim().is_empty() {
+            return Err("Default data directory path is empty.".to_string());
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let quoted_path = shell_quote_powershell(&path_str);
+            let parent_pid = std::process::id();
+            let command = format!(
+                "$pidToWait={parent_pid}; \
+                 while (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 300 }}; \
+                 $target='{quoted_path}'; \
+                 if (Test-Path -LiteralPath $target) {{ \
+                   Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue; \
+                 }}; \
+                 if (Test-Path -LiteralPath $target) {{ \
+                   Write-Output \"[cleanup] failed: $target\"; \
+                 }} else {{ \
+                   Write-Output \"[cleanup] removed: $target\"; \
+                 }}"
+            );
+            Command::new("powershell")
+                .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &command])
+                .spawn()
+                .map_err(|error| format!("Failed to schedule Windows cleanup: {error}"))?;
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let parent_pid = std::process::id();
+            let quoted_path = shell_quote_posix(&path_str);
+            let command = format!(
+                "while kill -0 {parent_pid} 2>/dev/null; do sleep 0.2; done; \
+                 rm -rf -- {quoted_path}; \
+                 if [ -e {quoted_path} ]; then \
+                   echo \"[cleanup] failed: {path_str}\"; \
+                 else \
+                   echo \"[cleanup] removed: {path_str}\"; \
+                 fi"
+            );
+            Command::new("sh")
+                .args(["-c", &command])
+                .spawn()
+                .map_err(|error| format!("Failed to schedule cleanup: {error}"))?;
+        }
+
+        Ok(())
+    }
+
+    let default_dir = crate::app_paths::data_dir()?;
+    println!(
+        "[cleanup] scheduled after exit for default dir: {}",
+        default_dir.display()
+    );
+    if let Err(error) = schedule_delete_after_exit(default_dir.as_path()) {
+        println!("[cleanup] scheduling failed: {error}");
+        return Err(error);
+    }
+
+    app_handle.exit(0);
+    Ok(())
+}
+
+#[tauri::command]
+fn reload_taskbar_file(state: State<'_, SharedState>) -> Result<(), String> {
+    let path = current_taskbar_path(&state)?;
+    let loaded = load_taskbar(path.as_path())?;
+    let mut manager = state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock task manager state".to_string())?;
+    *manager = loaded;
+    Ok(())
+}
+
 pub fn run_gui_app() -> tauri::Result<()> {
     #[cfg(target_os = "linux")]
     prepare_linux_ime_environment();
 
-    let runtime = initialize_runtime()
-        .map_err(|error| tauri::Error::Io(std::io::Error::other(error)))?;
+    let runtime =
+        initialize_runtime().map_err(|error| tauri::Error::Io(std::io::Error::other(error)))?;
 
     tauri::Builder::default()
         .manage(SharedState {
             manager: Mutex::new(runtime.manager),
-            taskbar_path: runtime.taskbar_path,
+            taskbar_path: Mutex::new(runtime.taskbar_path),
             settings: Mutex::new(runtime.settings),
         })
         .invoke_handler(tauri::generate_handler![
@@ -395,7 +539,9 @@ pub fn run_gui_app() -> tauri::Result<()> {
             undo_last_change,
             save_gui_settings_cmd,
             set_theme,
-            import_theme_file_cmd
+            import_theme_file_cmd,
+            delete_all_data_and_exit,
+            reload_taskbar_file
         ])
         .run(tauri::generate_context!())
 }

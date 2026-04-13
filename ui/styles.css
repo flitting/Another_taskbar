@@ -118,6 +118,11 @@ button:hover {
   filter: brightness(1.06);
 }
 
+button:disabled {
+  cursor: default;
+  filter: none;
+}
+
 button.primary {
   background: var(--accent);
 }
@@ -327,9 +332,9 @@ optgroup {
 
 .task-main {
   display: grid;
-  grid-template-columns: 22px 24px 34px minmax(0, 1fr);
+  grid-template-columns: 22px 24px 34px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .drag-handle {
@@ -425,11 +430,16 @@ optgroup {
 }
 
 .task-content {
+  display: block;
+  min-width: 0;
+}
+
+.task-meta {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  min-width: 0;
-  gap: 6px;
+  gap: 3px;
+  min-width: 92px;
 }
 
 .task-indent {
@@ -438,12 +448,16 @@ optgroup {
 }
 
 .stripes {
-  width: 20px;
+  width: 16px;
   min-height: 28px;
   display: flex;
-  gap: 4px;
-  justify-content: flex-end;
+  gap: 2px;
+  justify-content: stretch;
   align-items: center;
+}
+
+.stripes.single {
+  width: 8px;
 }
 
 .stripe {
@@ -477,6 +491,15 @@ optgroup {
   white-space: nowrap;
 }
 
+.task-desc-preview {
+  color: color-mix(in srgb, var(--muted) 88%, black 12%);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 46%;
+}
+
 .task-due {
   margin-left: auto;
   color: color-mix(in srgb, var(--muted) 85%, black 15%);
@@ -505,7 +528,7 @@ optgroup {
   opacity: 0;
   display: flex;
   gap: 4px;
-  width: 74px;
+  width: 92px;
   justify-content: flex-end;
   transition: opacity 0.15s ease;
   pointer-events: none;
@@ -520,7 +543,7 @@ optgroup {
   border: none;
   background: transparent;
   color: var(--muted);
-  font-size: 22px;
+  font-size: 20px;
   padding: 2px 6px;
 }
 
@@ -529,10 +552,11 @@ optgroup {
 }
 
 .subtasks {
-  margin-left: 0;
+  margin-left: 16px;
+  margin-right: 0;
   margin-top: 2px;
   border-top: 1px solid color-mix(in srgb, var(--border) 18%, transparent);
-  padding-top: 2px;
+  padding: 2px 0 0 0;
 }
 
 .task-item.dragging {
@@ -573,7 +597,7 @@ optgroup {
 }
 
 .modal {
-  width: min(820px, 84vw);
+  width: min(660px, 80vw);
   border: 1px solid color-mix(in srgb, var(--border) 56%, transparent);
   border-radius: 20px;
   background: var(--panel-soft);
@@ -584,9 +608,30 @@ optgroup {
 
 .settings-modal,
 .filter-modal {
-  width: min(660px, 82vw);
+  width: min(560px, 76vw);
   max-height: 84vh;
   overflow: auto;
+}
+
+.task-modal {
+  width: min(620px, 78vw);
+}
+
+.filter-modal {
+  width: min(500px, 72vw);
+}
+
+.confirm-modal {
+  width: min(420px, 68vw);
+}
+
+.confirm-modal .modal-head h2 {
+  font-size: clamp(22px, 3vw, 26px);
+}
+
+.confirm-modal .modal-body p {
+  margin: 0;
+  line-height: 1.5;
 }
 
 .modal::backdrop {
@@ -903,7 +948,39 @@ select:focus {
   border: 1px solid color-mix(in srgb, var(--danger) 86%, transparent);
   color: color-mix(in srgb, var(--text) 90%, white 10%);
   border-radius: 10px;
-  padding: 8px 12px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#error-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#error-close-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 4px;
+  font-size: 16px;
+}
+
+.summary-modal {
+  width: min(520px, 72vw);
+}
+
+.summary-body {
+  gap: 8px;
+}
+
+#summary-description-row {
+  margin: 0;
+  line-height: 1.45;
 }
 
 @media (max-width: 980px) {

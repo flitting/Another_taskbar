@@ -66,9 +66,8 @@ impl TaskManager {
         let month_u = month as u32;
         let day = naive.day().min(Self::last_day_of_month(year, month_u));
         let fallback = date;
-        let maybe = NaiveDate::from_ymd_opt(year, month_u, day).and_then(|d| {
-            d.and_hms_opt(naive.hour(), naive.minute(), naive.second())
-        });
+        let maybe = NaiveDate::from_ymd_opt(year, month_u, day)
+            .and_then(|d| d.and_hms_opt(naive.hour(), naive.minute(), naive.second()));
         maybe
             .map(|ndt| chrono::DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc))
             .unwrap_or(fallback)
@@ -124,7 +123,9 @@ impl TaskManager {
                     match custom.end {
                         RecurrenceEnd::Never => false,
                         RecurrenceEnd::OnDate(limit) => next_due > limit,
-                        RecurrenceEnd::AfterOccurrences(max_n) => recurrence.occurrences_done >= max_n,
+                        RecurrenceEnd::AfterOccurrences(max_n) => {
+                            recurrence.occurrences_done >= max_n
+                        }
                     }
                 } else {
                     true
@@ -286,8 +287,8 @@ impl TaskManager {
         if task_id == 0 || task_id == parent_id {
             return Err("Invalid move target".to_string());
         }
-        let moving_ref = Self::find_task_ref(&self.root, task_id)
-            .ok_or_else(|| "Task not found".to_string())?;
+        let moving_ref =
+            Self::find_task_ref(&self.root, task_id).ok_or_else(|| "Task not found".to_string())?;
         if Self::find_task_ref(moving_ref, parent_id).is_some() {
             return Err("Cannot move a task into its own descendant".to_string());
         }
@@ -296,14 +297,16 @@ impl TaskManager {
         }
 
         self.remember_state();
-        let moving =
-            Self::remove_task_from_tree(&mut self.root, task_id).ok_or_else(|| "Task not found".to_string())?;
+        let moving = Self::remove_task_from_tree(&mut self.root, task_id)
+            .ok_or_else(|| "Task not found".to_string())?;
         let parent = self
             .root
             .search_by_id(parent_id)
             .ok_or_else(|| "Parent task not found".to_string())?;
 
-        let idx = target_index.unwrap_or(parent.subtasks.len()).min(parent.subtasks.len());
+        let idx = target_index
+            .unwrap_or(parent.subtasks.len())
+            .min(parent.subtasks.len());
         parent.subtasks.insert(idx, moving);
         Self::resequence_custom_order(parent);
         for child in &mut parent.subtasks {
@@ -316,7 +319,9 @@ impl TaskManager {
         if sibling_id == 0 {
             return self.move_to_parent_index(task_id, 0, Some(0));
         }
-        let parent_id = self.find_parent_id(sibling_id).ok_or_else(|| "Sibling task not found".to_string())?;
+        let parent_id = self
+            .find_parent_id(sibling_id)
+            .ok_or_else(|| "Sibling task not found".to_string())?;
         let parent = self
             .root
             .search_by_id_ref(parent_id)
@@ -333,7 +338,9 @@ impl TaskManager {
         if sibling_id == 0 {
             return self.move_to_parent_index(task_id, 0, None);
         }
-        let parent_id = self.find_parent_id(sibling_id).ok_or_else(|| "Sibling task not found".to_string())?;
+        let parent_id = self
+            .find_parent_id(sibling_id)
+            .ok_or_else(|| "Sibling task not found".to_string())?;
         let parent = self
             .root
             .search_by_id_ref(parent_id)

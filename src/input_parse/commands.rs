@@ -730,7 +730,10 @@ fn setting_command(args: &[String]) {
 
     if eq_ci(setting_name, "language") {
         let Some(language) = AppLanguage::from_code(setting_value) else {
-            println!("Unknown language '{}'. Supported languages: en, zh-CN.", setting_value);
+            println!(
+                "Unknown language '{}'. Supported languages: en, zh-CN.",
+                setting_value
+            );
             return;
         };
 

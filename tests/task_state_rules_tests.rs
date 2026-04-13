@@ -7,7 +7,9 @@ use common::draft_named;
 #[test]
 fn parent_auto_completes_when_all_direct_subtasks_complete() {
     let mut manager = another_taskbar::tasks::TaskManager::new();
-    let parent_id = manager.create_task_from_draft(0, draft_named("Parent")).unwrap();
+    let parent_id = manager
+        .create_task_from_draft(0, draft_named("Parent"))
+        .unwrap();
     let child_a = manager
         .create_task_from_draft(parent_id, draft_named("Child A"))
         .unwrap();
@@ -29,7 +31,9 @@ fn parent_auto_completes_when_all_direct_subtasks_complete() {
 #[test]
 fn completing_parent_can_cascade_to_all_descendants() {
     let mut manager = another_taskbar::tasks::TaskManager::new();
-    let parent_id = manager.create_task_from_draft(0, draft_named("Parent")).unwrap();
+    let parent_id = manager
+        .create_task_from_draft(0, draft_named("Parent"))
+        .unwrap();
     let child_id = manager
         .create_task_from_draft(parent_id, draft_named("Child"))
         .unwrap();
@@ -52,7 +56,9 @@ fn completing_parent_can_cascade_to_all_descendants() {
 #[test]
 fn blocking_parent_can_cascade_to_all_descendants() {
     let mut manager = another_taskbar::tasks::TaskManager::new();
-    let parent_id = manager.create_task_from_draft(0, draft_named("Parent")).unwrap();
+    let parent_id = manager
+        .create_task_from_draft(0, draft_named("Parent"))
+        .unwrap();
     let child_id = manager
         .create_task_from_draft(parent_id, draft_named("Child"))
         .unwrap();

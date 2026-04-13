@@ -28,6 +28,10 @@ pub struct GuiSettings {
     pub enabled_optional_states: Vec<TaskState>,
     #[serde(default = "default_auto_complete_parent_tasks")]
     pub auto_complete_parent_tasks: bool,
+    #[serde(default = "default_task_data_directory")]
+    pub task_data_directory: String,
+    #[serde(default = "default_ui_scale")]
+    pub ui_scale: f32,
 }
 
 impl Default for GuiSettings {
@@ -39,6 +43,8 @@ impl Default for GuiSettings {
             task_sort_mode: default_task_sort_mode(),
             enabled_optional_states: Vec::new(),
             auto_complete_parent_tasks: default_auto_complete_parent_tasks(),
+            task_data_directory: default_task_data_directory(),
+            ui_scale: default_ui_scale(),
         }
     }
 }
@@ -57,6 +63,16 @@ fn default_task_sort_mode() -> TaskSortMode {
 
 fn default_auto_complete_parent_tasks() -> bool {
     true
+}
+
+fn default_task_data_directory() -> String {
+    app_paths::data_dir()
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_default()
+}
+
+fn default_ui_scale() -> f32 {
+    1.0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -191,7 +207,15 @@ pub fn save_gui_settings(settings: &GuiSettings) -> Result<(), String> {
 
 fn normalize_gui_settings(settings: &mut GuiSettings) {
     settings.task_font_size = settings.task_font_size.clamp(11, 28);
-    settings.enabled_optional_states = normalize_optional_states(settings.enabled_optional_states.clone());
+    settings.enabled_optional_states =
+        normalize_optional_states(settings.enabled_optional_states.clone());
+    let trimmed = settings.task_data_directory.trim();
+    settings.task_data_directory = if trimmed.is_empty() {
+        default_task_data_directory()
+    } else {
+        trimmed.to_string()
+    };
+    settings.ui_scale = settings.ui_scale.clamp(0.8, 1.4);
 }
 
 fn normalize_optional_states(states: Vec<TaskState>) -> Vec<TaskState> {

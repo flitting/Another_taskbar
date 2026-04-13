@@ -1,30 +1,35 @@
 use std::fs;
 use std::path::PathBuf;
 
-use directories::ProjectDirs;
+use directories::BaseDirs;
 
-const QUALIFIER: &str = "io";
-const ORGANIZATION: &str = "another_taskbar";
-const APPLICATION: &str = "another_taskbar";
+#[cfg(target_os = "windows")]
+const APP_DIR_NAME: &str = "AnotherTaskbar";
+#[cfg(not(target_os = "windows"))]
+const APP_DIR_NAME: &str = "another_taskbar";
 const GUI_SETTINGS_FILE_NAME: &str = "config.toml";
 const TASKBAR_FILE_NAME: &str = "tasks.json";
 const THEMES_DIR_NAME: &str = "themes";
+const CACHE_DIR_NAME: &str = "cache";
 
-fn project_dirs() -> Result<ProjectDirs, String> {
-    ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
-        .ok_or_else(|| "Could not determine application directories for this platform.".to_string())
+fn app_dir() -> Result<PathBuf, String> {
+    let home = BaseDirs::new()
+        .ok_or_else(|| "Could not determine user home directory for this platform.".to_string())?
+        .home_dir()
+        .to_path_buf();
+    Ok(home.join(APP_DIR_NAME))
 }
 
 pub fn config_dir() -> Result<PathBuf, String> {
-    Ok(project_dirs()?.config_dir().to_path_buf())
+    app_dir()
 }
 
 pub fn data_dir() -> Result<PathBuf, String> {
-    Ok(project_dirs()?.data_dir().to_path_buf())
+    app_dir()
 }
 
 pub fn cache_dir() -> Result<PathBuf, String> {
-    Ok(project_dirs()?.cache_dir().to_path_buf())
+    Ok(app_dir()?.join(CACHE_DIR_NAME))
 }
 
 pub fn gui_settings_path() -> Result<PathBuf, String> {
@@ -40,7 +45,7 @@ pub fn themes_dir() -> Result<PathBuf, String> {
 }
 
 pub fn ensure_app_dirs() -> Result<(), String> {
-    for dir in [config_dir()?, data_dir()?, cache_dir()?, themes_dir()?] {
+    for dir in [config_dir()?, cache_dir()?, themes_dir()?] {
         fs::create_dir_all(&dir)
             .map_err(|error| format!("Failed to create '{}': {error}", dir.display()))?;
     }
@@ -49,15 +54,11 @@ pub fn ensure_app_dirs() -> Result<(), String> {
 }
 
 pub fn clear_app_data() -> Result<(), String> {
-    let config_dir = config_dir()?;
-    let data_dir = data_dir()?;
-    let cache_dir = cache_dir()?;
+    let root_dir = app_dir()?;
 
-    for dir in [config_dir, data_dir, cache_dir] {
-        if dir.exists() {
-            fs::remove_dir_all(&dir)
-                .map_err(|error| format!("Failed to remove '{}': {error}", dir.display()))?;
-        }
+    if root_dir.exists() {
+        fs::remove_dir_all(&root_dir)
+            .map_err(|error| format!("Failed to remove '{}': {error}", root_dir.display()))?;
     }
 
     Ok(())

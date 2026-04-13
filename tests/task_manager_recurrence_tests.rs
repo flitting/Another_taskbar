@@ -1,6 +1,6 @@
 mod common;
 
-use another_taskbar::tasks::{TaskState, TaskSortMode};
+use another_taskbar::tasks::{TaskSortMode, TaskState};
 
 use common::{create_root_task, custom_weekly_after, daily_recurrence_in_past, due_days_ago};
 

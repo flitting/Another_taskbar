@@ -10,6 +10,8 @@ if (!invoke) {
 
 const els = {
   errorBox: document.getElementById("error-box"),
+  errorText: document.getElementById("error-text"),
+  errorCloseBtn: document.getElementById("error-close-btn"),
   taskBoard: document.getElementById("task-board"),
   taskList: document.getElementById("task-list"),
   searchInput: document.getElementById("search-input"),
@@ -48,7 +50,19 @@ const els = {
   taskFormTagAdd: document.getElementById("task-form-tag-add"),
   taskFormTagsList: document.getElementById("task-form-tags-list"),
   taskFormQuickTags: document.getElementById("task-form-quick-tags"),
+  quickTagsLabel: document.getElementById("quick-tags-label"),
   taskFormTimes: document.getElementById("task-form-times"),
+
+  summaryModal: document.getElementById("summary-modal"),
+  summaryTitle: document.getElementById("summary-title"),
+  summaryStateRow: document.getElementById("summary-state-row"),
+  summaryPriorityRow: document.getElementById("summary-priority-row"),
+  summaryDescriptionRow: document.getElementById("summary-description-row"),
+  summaryTagsRow: document.getElementById("summary-tags-row"),
+  summaryTimesRow: document.getElementById("summary-times-row"),
+  summaryCloseBtn: document.getElementById("summary-close-btn"),
+  summaryOpenDetailBtn: document.getElementById("summary-open-detail-btn"),
+  summaryCloseFooterBtn: document.getElementById("summary-close-footer-btn"),
 
   settingsModal: document.getElementById("settings-modal"),
   settingsModalClose: document.getElementById("settings-modal-close"),
@@ -59,8 +73,14 @@ const els = {
   settingsTaskFontSize: document.getElementById("settings-task-font-size"),
   settingsTaskFontSizeValue: document.getElementById("settings-task-font-size-value"),
   settingsThemePath: document.getElementById("settings-theme-path"),
+  settingsThemeDefaultPath: document.getElementById("settings-theme-default-path"),
+  settingsDataDir: document.getElementById("settings-data-dir"),
   settingsImportBtn: document.getElementById("settings-import-btn"),
+  settingsLoadTaskbarBtn: document.getElementById("settings-load-taskbar-btn"),
   settingsSaveBtn: document.getElementById("settings-save-btn"),
+  settingsDeleteDataBtn: document.getElementById("settings-delete-data-btn"),
+  settingsUiScale: document.getElementById("settings-ui-scale"),
+  settingsUiScaleValue: document.getElementById("settings-ui-scale-value"),
 
   filterModal: document.getElementById("filter-modal"),
   filterModalClose: document.getElementById("filter-modal-close"),
@@ -95,6 +115,11 @@ const els = {
   recurrenceEndCount: document.getElementById("recurrence-end-count"),
   recurrenceModalSave: document.getElementById("recurrence-modal-save"),
   recurrenceModalCancel: document.getElementById("recurrence-modal-cancel"),
+  confirmModal: document.getElementById("confirm-modal"),
+  confirmTitle: document.getElementById("confirm-title"),
+  confirmMessage: document.getElementById("confirm-message"),
+  confirmCancelBtn: document.getElementById("confirm-cancel-btn"),
+  confirmOkBtn: document.getElementById("confirm-ok-btn"),
   hoverTip: document.getElementById("hover-tip"),
   dragZones: document.getElementById("drag-zones"),
   dragDeleteZone: document.getElementById("drag-delete-zone"),
@@ -108,6 +133,7 @@ const app = {
   modalMode: "create",
   modalTaskId: null,
   modalParentId: 0,
+  summaryTaskId: null,
   modalTags: [],
   appliedFilter: {
     search: "",
@@ -143,8 +169,19 @@ const app = {
 };
 
 function setError(message) {
-  els.errorBox.textContent = message || "";
-  els.errorBox.style.display = message ? "block" : "none";
+  const text = (message || "").trim();
+  els.errorText.textContent = text;
+  els.errorBox.style.display = text ? "flex" : "none";
+}
+
+function localizeInvokeError(command, text) {
+  if (command === "undo_last_change" && text.includes("Nothing to undo")) {
+    return t("error_nothing_to_undo", "Nothing to undo.");
+  }
+  if (command === "reload_taskbar_file" && text.includes("Failed to read taskbar file")) {
+    return t("error_load_taskbar_json", "Failed to load taskbar.json from the configured directory.");
+  }
+  return text;
 }
 
 async function safeInvoke(command, payload) {
@@ -153,9 +190,53 @@ async function safeInvoke(command, payload) {
     return await invoke(command, payload);
   } catch (error) {
     const text = typeof error === "string" ? error : JSON.stringify(error);
-    setError(`${command} failed: ${text}`);
+    setError(localizeInvokeError(command, text));
     throw error;
   }
+}
+
+function applyUiScale(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return;
+  const clamped = Math.max(0.8, Math.min(1.4, numeric));
+  document.body.style.zoom = String(clamped);
+  if (els.settingsUiScale) {
+    els.settingsUiScale.value = String(clamped);
+  }
+  if (els.settingsUiScaleValue) {
+    els.settingsUiScaleValue.textContent = `${Math.round(clamped * 100)}%`;
+  }
+}
+
+function askConfirmation(title, message, confirmLabel = null) {
+  return new Promise((resolve) => {
+    els.confirmTitle.textContent = title;
+    els.confirmMessage.textContent = message;
+    els.confirmOkBtn.textContent = confirmLabel || t("confirm", "Confirm");
+
+    const finish = (result) => {
+      cleanup();
+      if (els.confirmModal.open) {
+        els.confirmModal.close();
+      }
+      resolve(result);
+    };
+
+    const onCancel = () => finish(false);
+    const onConfirm = () => finish(true);
+    const onClose = () => finish(false);
+
+    const cleanup = () => {
+      els.confirmCancelBtn.removeEventListener("click", onCancel);
+      els.confirmOkBtn.removeEventListener("click", onConfirm);
+      els.confirmModal.removeEventListener("close", onClose);
+    };
+
+    els.confirmCancelBtn.addEventListener("click", onCancel);
+    els.confirmOkBtn.addEventListener("click", onConfirm);
+    els.confirmModal.addEventListener("close", onClose);
+    els.confirmModal.showModal();
+  });
 }
 
 async function invokeCreateTask(parentId, draft) {
@@ -277,6 +358,12 @@ function updateSearchClearButton() {
   els.searchClearBtn.style.opacity = hasText ? "0.9" : "0.35";
 }
 
+function updateUndoButtonState() {
+  const canUndo = !!app.snapshot?.can_undo;
+  els.undoBtn.disabled = !canUndo;
+  els.undoBtn.style.opacity = canUndo ? "1" : "0.45";
+}
+
 function hasActiveDragBlockingFilters() {
   const f = app.appliedFilter;
   return (
@@ -395,6 +482,19 @@ function formatDueShort(value) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function importanceValueLabel(value) {
+  if (value === "High") return t("high", "High");
+  if (value === "Low") return t("low", "Low");
+  return t("none", "None");
+}
+
+function truncateText(value, maxLength = 56) {
+  const text = (value || "").trim();
+  if (!text) return "";
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 3))}...`;
 }
 
 function normalizeTag(tag) {
@@ -654,7 +754,8 @@ function renderSelectList(
   options,
   selected,
   formatLabel = (value) => value,
-  onChange = null
+  onChange = null,
+  formatTriggerLabel = null
 ) {
   controlEl.innerHTML = "";
   controlEl.classList.remove("open");
@@ -671,7 +772,7 @@ function renderSelectList(
     chosen = options[0] ?? "";
   }
   controlEl.dataset.value = chosen;
-  trigger.textContent = formatLabel(chosen);
+  trigger.textContent = (formatTriggerLabel || formatLabel)(chosen);
 
   for (const value of options) {
     const option = document.createElement("button");
@@ -682,7 +783,7 @@ function renderSelectList(
     option.classList.toggle("active", value === chosen);
     option.addEventListener("click", () => {
       controlEl.dataset.value = value;
-      trigger.textContent = formatLabel(value);
+      trigger.textContent = (formatTriggerLabel || formatLabel)(value);
       for (const item of menu.querySelectorAll(".select-option")) {
         item.classList.toggle("active", item.dataset.value === value);
       }
@@ -778,13 +879,14 @@ function applyTaskFontSize(value) {
   const size = Number(value);
   if (!Number.isFinite(size)) return;
   const clamped = Math.max(11, Math.min(28, Math.round(size)));
+  const defaultSize = 14;
   document.documentElement.style.setProperty("--task-font-size", `${clamped}px`);
   document.documentElement.style.setProperty("--modal-font-size", `${clamped}px`);
   if (els.settingsTaskFontSize) {
     els.settingsTaskFontSize.value = String(clamped);
   }
   if (els.settingsTaskFontSizeValue) {
-    els.settingsTaskFontSizeValue.textContent = `${clamped}px`;
+    els.settingsTaskFontSizeValue.textContent = `${clamped}px (${t("default_value", "default")}: ${defaultSize}px)`;
   }
 }
 
@@ -794,6 +896,10 @@ function sortModeLabel(value) {
   if (value === "UpdateFirst") return t("task_sort_update", "Update first");
   if (value === "CompleteFirst") return t("task_sort_complete", "Complete first");
   return t("task_sort_custom", "Custom");
+}
+
+function sortDisplayLabel(value) {
+  return `${t("sort_in_prefix", "Sort in")} : ${sortModeLabel(value)}`;
 }
 
 function shouldConfirmCascade(task, nextState) {
@@ -824,6 +930,10 @@ async function saveSortMode(value) {
     task_font_size: current.task_font_size,
     selected_language: current.selected_language,
     task_sort_mode: value,
+    enabled_optional_states: current.enabled_optional_states || [],
+    auto_complete_parent_tasks: current.auto_complete_parent_tasks !== false,
+    task_data_directory: current.task_data_directory || "",
+    ui_scale: current.ui_scale ?? 1.0,
   };
   await safeInvoke("save_gui_settings_cmd", { settings });
   await refresh();
@@ -838,7 +948,8 @@ function renderToolbarSortMode() {
     sortModeLabel,
     (value) => {
       saveSortMode(value);
-    }
+    },
+    sortDisplayLabel
   );
   setTip(els.toolbarSort.querySelector(".select-trigger"), t("task_sort", "Task Sort"));
 }
@@ -875,7 +986,10 @@ function renderModalTags() {
   }
 
   els.taskFormQuickTags.innerHTML = "";
-  for (const tag of app.snapshot?.common_tags || []) {
+  const quickTags = app.snapshot?.common_tags || [];
+  els.quickTagsLabel.style.display = quickTags.length ? "" : "none";
+  els.taskFormQuickTags.style.display = quickTags.length ? "flex" : "none";
+  for (const tag of quickTags) {
     const chip = document.createElement("button");
     chip.className = "chip";
     chip.textContent = tag;
@@ -1074,6 +1188,9 @@ function applyLocalizedText() {
   setTip(els.taskModalCancel, t("close_detail_help", "Close"));
   setTip(els.taskModalDelete, t("delete_help", "Delete task"));
   setTip(els.taskModalClose, t("close_popup_help", "Close"));
+  els.summaryOpenDetailBtn.textContent = t("open_detail", "Open details");
+  els.summaryCloseFooterBtn.textContent = t("close", "Close");
+  setTip(els.summaryCloseBtn, t("close_popup_help", "Close"));
 
   document.getElementById("settings-title").textContent = t("settings", "Settings");
   document.getElementById("settings-theme-label").textContent = t("theme", "Theme");
@@ -1086,11 +1203,31 @@ function applyLocalizedText() {
     `${t("task_font_size", "Task Font Size")}\n`;
   document.getElementById("settings-theme-path-label").childNodes[0].textContent =
     `${t("import_theme_path", "Import Theme Path")}\n`;
-  els.settingsImportBtn.textContent = t("load", "Load...");
+  els.settingsThemeDefaultPath.textContent =
+    `${t("theme_default_path", "Theme path")}: ${app.snapshot?.theme_dir_path || "-"}`;
+  document.getElementById("settings-data-dir-label").childNodes[0].textContent =
+    `${t("data_directory_path", "Data Directory Path")}\n`;
+  document.getElementById("settings-ui-scale-label").childNodes[0].textContent =
+    `${t("ui_scale", "UI Scale")}\n`;
+  els.settingsImportBtn.textContent = t("import_theme", "Import Theme");
+  els.settingsLoadTaskbarBtn.textContent = t("load_taskbar_json", "Load taskbar.json");
   els.settingsSaveBtn.textContent = t("save", "Save");
+  els.settingsDeleteDataBtn.textContent = t(
+    "delete_all_data_exit",
+    "Delete all data and exit"
+  );
   setTip(els.settingsModalClose, t("close_settings_help", "Close settings"));
-  setTip(els.settingsImportBtn, t("load_help", "Load"));
+  setTip(els.settingsImportBtn, t("import_theme_help", "Import theme from a TOML file path."));
+  setTip(
+    els.settingsLoadTaskbarBtn,
+    t("load_taskbar_json_help", "Reload taskbar.json from the configured data directory.")
+  );
+  setTip(els.settingsUiScale, t("ui_scale_help", "Adjust overall UI zoom."));
   setTip(els.settingsSaveBtn, t("save_settings_help", "Save settings"));
+  setTip(
+    els.settingsDeleteDataBtn,
+    t("delete_all_data_exit_help", "Delete all app data and quit immediately.")
+  );
   els.dragDeleteZone.textContent = t("delete", "Delete");
   els.dragCancelZone.textContent = t("cancel_drag", "Cancel Drag");
 
@@ -1204,11 +1341,28 @@ function openTaskModalEdit(taskId) {
   renderRecurrenceControls();
   updateTimeButtons();
   els.taskFormTagInput.value = "";
-  els.taskFormTimes.textContent =
-    `Created: ${formatDateTime(task.times?.created_at)} | Updated: ${formatDateTime(task.times?.updated_at)}`;
+  els.taskFormTimes.textContent = `${t("created_at", "Created at")}: ${formatDateTime(task.times?.created_at)} | ${t("updated_at", "Updated at")}: ${formatDateTime(task.times?.updated_at)}`;
 
   renderModalTags();
   els.taskModal.showModal();
+}
+
+function openTaskSummaryModal(taskId) {
+  const task = findTaskById(app.snapshot?.tasks || [], taskId);
+  if (!task) return;
+  app.summaryTaskId = taskId;
+  els.summaryTitle.textContent = task.name || "Untitled";
+  els.summaryStateRow.textContent = `${stateSymbol(task.state)} ${stateLabel(task.state)}`;
+  const urgencyLabel = importanceValueLabel(task.urgency);
+  const importanceLabel = importanceValueLabel(task.importance);
+  els.summaryPriorityRow.textContent =
+    `${t("urgency", "Urgency")}: ${urgencyLabel} | ${t("importance", "Importance")}: ${importanceLabel}`;
+  els.summaryDescriptionRow.textContent = task.description?.trim() || t("no_description", "No description");
+  const tags = (task.tags || []).join(", ");
+  els.summaryTagsRow.textContent = tags ? `${t("tags", "Tags")}: ${tags}` : `${t("tags", "Tags")}: ${t("none", "None")}`;
+  els.summaryTimesRow.textContent =
+    `${t("created_at", "Created at")}: ${formatDateTime(task.times?.created_at)} | ${t("updated_at", "Updated at")}: ${formatDateTime(task.times?.updated_at)}`;
+  els.summaryModal.showModal();
 }
 
 async function saveTaskFromModal() {
@@ -1252,7 +1406,11 @@ async function deleteTaskFromModal() {
 
   const task = findTaskById(app.snapshot?.tasks || [], app.modalTaskId);
   if (!task) return;
-  if (!window.confirm(`Delete '${task.name}'?`)) return;
+  const confirmed = await askConfirmation(
+    t("delete", "Delete"),
+    t("delete_task_confirm_named", `Delete '${task.name}'?`)
+  );
+  if (!confirmed) return;
 
   await safeInvoke("delete_task", { id: app.modalTaskId });
   app.selectedId = null;
@@ -1404,7 +1562,9 @@ function openSettingsModal() {
   els.settingsAutoCompleteParents.checked = settings.auto_complete_parent_tasks !== false;
   els.settingsTaskFontSize.value = String(settings.task_font_size ?? 14);
   applyTaskFontSize(settings.task_font_size ?? 14);
+  applyUiScale(settings.ui_scale ?? 1.0);
   els.settingsThemePath.value = "";
+  els.settingsDataDir.value = settings.task_data_directory || "";
 
   els.settingsModal.showModal();
 }
@@ -1420,6 +1580,9 @@ async function saveSettings() {
     task_sort_mode: app.snapshot?.settings?.task_sort_mode || "Custom",
     enabled_optional_states: enabledOptionalStates,
     auto_complete_parent_tasks: els.settingsAutoCompleteParents.checked,
+    task_data_directory:
+      (els.settingsDataDir.value || "").trim() || app.snapshot?.settings?.task_data_directory || "",
+    ui_scale: Number(els.settingsUiScale.value || 1),
   };
 
   await safeInvoke("save_gui_settings_cmd", { settings });
@@ -1439,6 +1602,28 @@ async function importTheme() {
   await safeInvoke("import_theme_file_cmd", { path });
   await refresh();
   openSettingsModal();
+}
+
+async function loadTaskbarFromCurrentDirectory() {
+  await safeInvoke("reload_taskbar_file");
+  await refresh();
+}
+
+async function deleteAllDataAndExit() {
+  const firstConfirm = await askConfirmation(
+    t("confirm_delete_data_title", "Are you sure you want to delete all application data?"),
+    t("confirm_delete_data_hint", "This will remove settings, tasks, themes, and cache.")
+  );
+  if (!firstConfirm) return;
+
+  const secondConfirm = await askConfirmation(
+    t("confirm_delete_data_second_title", "Final confirmation"),
+    t("confirm_delete_data_body", "This action cannot be undone."),
+    t("confirm_delete_data_btn", "Delete all and exit")
+  );
+  if (!secondConfirm) return;
+
+  await safeInvoke("delete_all_data_and_exit");
 }
 
 function createStripe(color, tip = "") {
@@ -1581,6 +1766,8 @@ function renderTaskRow(task, depth, parentId = 0) {
 
   const content = document.createElement("div");
   content.className = "task-content";
+  const meta = document.createElement("div");
+  meta.className = "task-meta";
 
   const title = document.createElement("div");
   title.className = "task-title";
@@ -1593,6 +1780,14 @@ function renderTaskRow(task, depth, parentId = 0) {
   nameSpan.textContent = task.name || "Untitled";
   title.append(nameSpan);
 
+  const descPreview = truncateText(task.description, 52);
+  if (descPreview) {
+    const descSpan = document.createElement("span");
+    descSpan.className = "task-desc-preview";
+    descSpan.textContent = descPreview;
+    title.append(descSpan);
+  }
+
   if (task.state !== "Completed" && task.state !== "Blocked" && task.times?.due_date) {
     const dueSpan = document.createElement("span");
     dueSpan.className = "task-due";
@@ -1602,11 +1797,19 @@ function renderTaskRow(task, depth, parentId = 0) {
   }
   title.addEventListener("click", () => {
     app.selectedId = task.id;
-    openTaskModalEdit(task.id);
+    openTaskSummaryModal(task.id);
   });
 
   const quick = document.createElement("div");
   quick.className = "quick";
+
+  const detailBtn = document.createElement("button");
+  detailBtn.textContent = "⚙";
+  setTip(detailBtn, t("open_detail", "Open details"));
+  detailBtn.addEventListener("click", () => {
+    app.selectedId = task.id;
+    openTaskModalEdit(task.id);
+  });
 
   const star = document.createElement("button");
   star.textContent = task.pinned ? "★" : "☆";
@@ -1624,9 +1827,16 @@ function renderTaskRow(task, depth, parentId = 0) {
     openTaskModalCreate(task.id);
   });
 
-  quick.append(star, plus);
-  content.append(title, stripes, quick);
-  main.append(handle, caret, stateWrap, content);
+  quick.append(detailBtn, star, plus);
+  content.append(title);
+  if (stripes.childElementCount > 0) {
+    if (stripes.childElementCount === 1) {
+      stripes.classList.add("single");
+    }
+    meta.append(stripes);
+  }
+  meta.append(quick);
+  main.append(handle, caret, stateWrap, content, meta);
   li.append(main);
 
   if (hasChildren && !app.collapsed.has(task.id)) {
@@ -1904,6 +2114,7 @@ async function refresh() {
   app.strings = app.snapshot?.strings || {};
   applyTheme(app.snapshot.active_theme);
   applyTaskFontSize(app.snapshot?.settings?.task_font_size ?? 14);
+  applyUiScale(app.snapshot?.settings?.ui_scale ?? 1.0);
   applyLocalizedText();
 
   if (!findTaskById(app.snapshot.tasks || [], app.selectedId)) {
@@ -1913,6 +2124,7 @@ async function refresh() {
   renderTaskList();
   renderToolbarSortMode();
   updateSearchClearButton();
+  updateUndoButtonState();
 }
 
 document.addEventListener("pointerdown", (event) => {
@@ -1954,6 +2166,7 @@ els.searchClearBtn.addEventListener("click", () => {
 
 els.newTaskBtn.addEventListener("click", () => openTaskModalCreate(0));
 els.undoBtn.addEventListener("click", async () => {
+  if (els.undoBtn.disabled) return;
   await safeInvoke("undo_last_change");
   await refresh();
 });
@@ -1964,6 +2177,17 @@ els.taskModalClose.addEventListener("click", () => els.taskModal.close());
 els.taskModalCancel.addEventListener("click", () => els.taskModal.close());
 els.taskModalSave.addEventListener("click", saveTaskFromModal);
 els.taskModalDelete.addEventListener("click", deleteTaskFromModal);
+els.summaryCloseBtn.addEventListener("click", () => els.summaryModal.close());
+els.summaryCloseFooterBtn.addEventListener("click", () => els.summaryModal.close());
+els.summaryOpenDetailBtn.addEventListener("click", () => {
+  if (app.summaryTaskId == null) return;
+  const id = app.summaryTaskId;
+  els.summaryModal.close();
+  openTaskModalEdit(id);
+});
+els.summaryModal.addEventListener("close", () => {
+  app.summaryTaskId = null;
+});
 
 els.taskFormTagAdd.addEventListener("click", () => {
   addModalTag(els.taskFormTagInput.value);
@@ -2052,9 +2276,17 @@ els.recurrenceModalSave.addEventListener("click", () => {
 els.settingsModalClose.addEventListener("click", () => els.settingsModal.close());
 els.settingsSaveBtn.addEventListener("click", saveSettings);
 els.settingsImportBtn.addEventListener("click", importTheme);
+els.settingsLoadTaskbarBtn.addEventListener("click", loadTaskbarFromCurrentDirectory);
+els.settingsDeleteDataBtn.addEventListener("click", deleteAllDataAndExit);
 els.settingsTaskFontSize.addEventListener("input", () => {
   applyTaskFontSize(els.settingsTaskFontSize.value);
 });
+els.settingsUiScale.addEventListener("input", () => {
+  applyUiScale(els.settingsUiScale.value);
+});
+
+els.confirmCancelBtn.addEventListener("click", () => els.confirmModal.close());
+els.errorCloseBtn.addEventListener("click", () => setError(""));
 
 els.filterModalClose.addEventListener("click", () => els.filterModal.close());
 els.filterClearBtn.addEventListener("click", clearDraftFilters);

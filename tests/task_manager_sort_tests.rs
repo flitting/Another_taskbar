@@ -39,8 +39,14 @@ fn task_name_sort_orders_alphabetically() {
 
 #[test]
 fn task_sort_mode_parses_shared_codes() {
-    assert_eq!(TaskSortMode::from_code("custom"), Some(TaskSortMode::Custom));
-    assert_eq!(TaskSortMode::from_code("task_name"), Some(TaskSortMode::TaskName));
+    assert_eq!(
+        TaskSortMode::from_code("custom"),
+        Some(TaskSortMode::Custom)
+    );
+    assert_eq!(
+        TaskSortMode::from_code("task_name"),
+        Some(TaskSortMode::TaskName)
+    );
     assert_eq!(
         TaskSortMode::from_code("create_first"),
         Some(TaskSortMode::CreateFirst)
