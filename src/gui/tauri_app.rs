@@ -1,12 +1,14 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
+#[cfg(not(target_os = "android"))]
 use tauri::image::Image;
+#[cfg(not(target_os = "android"))]
 use tauri::menu::MenuBuilder;
+#[cfg(not(target_os = "android"))]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::{AppHandle, Manager, State};
 
@@ -28,12 +30,16 @@ struct SharedState {
     settings: Mutex<GuiSettings>,
     notified_task_ids: Mutex<HashSet<u32>>,
     pending_notification_task_id: Mutex<Option<u32>>,
+    #[cfg(not(target_os = "android"))]
     tray_alert_active: AtomicBool,
+    #[cfg(not(target_os = "android"))]
     tray_flash_worker_running: AtomicBool,
     ignore_all_notifications: AtomicBool,
 }
 
+#[cfg(not(target_os = "android"))]
 const DEFAULT_TRAY_ICON_BYTES: &[u8] = include_bytes!("../../icons/icon.png");
+#[cfg(not(target_os = "android"))]
 const NOTIFICATION_TRAY_ICON_BYTES: &[u8] = include_bytes!("../../icons/notification.png");
 
 #[derive(Debug, Serialize)]
@@ -439,136 +445,149 @@ fn import_theme_file_cmd(state: State<'_, SharedState>, path: String) -> Result<
 
 #[tauri::command]
 fn delete_all_data_and_exit(app_handle: AppHandle) -> Result<(), String> {
-    #[cfg(not(target_os = "windows"))]
-    fn shell_quote_posix(value: &str) -> String {
-        let escaped = value.replace('\'', r"'\''");
-        format!("'{escaped}'")
-    }
-
-    #[cfg(target_os = "windows")]
-    fn shell_quote_powershell(value: &str) -> String {
-        value.replace('\'', "''")
-    }
-
-    fn schedule_delete_after_exit(path: &Path) -> Result<(), String> {
-        let path_str = path.to_string_lossy().to_string();
-        if path_str.trim().is_empty() {
-            return Err("Default data directory path is empty.".to_string());
-        }
-
-        #[cfg(target_os = "linux")]
-        {
-            use std::fs::OpenOptions;
-            use std::os::unix::process::CommandExt;
-            use std::process::Stdio;
-
-            let parent_pid = std::process::id();
-            let quoted_path = shell_quote_posix(&path_str);
-
-            let command = format!(
-                "while kill -0 {parent_pid} 2>/dev/null; do sleep 0.2; done; \
-                 sleep 0.8; \
-                 i=0; \
-                 while [ $i -lt 20 ]; do \
-                   if [ ! -e {quoted_path} ]; then exit 0; fi; \
-                   rm -rf -- {quoted_path}; \
-                   if [ ! -e {quoted_path} ]; then exit 0; fi; \
-                   i=$((i+1)); \
-                   sleep 0.5; \
-                 done; \
-                 exit 1"
-            );
-
-            let devnull_in = OpenOptions::new()
-                .read(true)
-                .open("/dev/null")
-                .map_err(|e| format!("Failed to open /dev/null for stdin: {e}"))?;
-            let devnull_out = OpenOptions::new()
-                .write(true)
-                .open("/dev/null")
-                .map_err(|e| format!("Failed to open /dev/null for stdout: {e}"))?;
-            let devnull_err = OpenOptions::new()
-                .write(true)
-                .open("/dev/null")
-                .map_err(|e| format!("Failed to open /dev/null for stderr: {e}"))?;
-
-            let mut cmd = Command::new("sh");
-            cmd.args(["-c", &command])
-                .stdin(Stdio::from(devnull_in))
-                .stdout(Stdio::from(devnull_out))
-                .stderr(Stdio::from(devnull_err));
-
-            unsafe {
-                cmd.pre_exec(|| {
-                    libc::setsid();
-                    Ok(())
-                });
-            }
-
-            cmd.spawn()
-                .map_err(|error| format!("Failed to schedule cleanup: {error}"))?;
+    #[cfg(not(target_os = "android"))]
+    {
+        use std::process::Command;
+        
+        #[cfg(not(target_os = "windows"))]
+        fn shell_quote_posix(value: &str) -> String {
+            let escaped = value.replace('\'', r"'\''");
+            format!("'{escaped}'")
         }
 
         #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-            const DETACHED_PROCESS: u32 = 0x00000008;
-            const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
-
-            let quoted_path = shell_quote_powershell(&path_str);
-            let command = format!(
-                "$target='{quoted_path}'; \
-                 for ($i=0; $i -lt 30; $i++) {{ \
-                     if (-not (Test-Path -LiteralPath $target)) {{ exit 0 }}; \
-                     Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue; \
-                     if (-not (Test-Path -LiteralPath $target)) {{ exit 0 }}; \
-                     Start-Sleep -Milliseconds 500; \
-                 }}; \
-                 exit 1"
-            );
-
-            Command::new("powershell")
-                .args([
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-WindowStyle",
-                    "Hidden",
-                    "-Command",
-                    &command,
-                ])
-                .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
-                .spawn()
-                .map_err(|error| format!("Failed to schedule Windows cleanup: {error}"))?;
+        fn shell_quote_powershell(value: &str) -> String {
+            value.replace('\'', "''")
         }
 
-        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-        {
-            let parent_pid = std::process::id();
-            let quoted_path = shell_quote_posix(&path_str);
-            let command = format!(
-                "while kill -0 {parent_pid} 2>/dev/null; do sleep 0.2; done; \
-                 sleep 0.8; \
-                 rm -rf -- {quoted_path}"
-            );
+        fn schedule_delete_after_exit(path: &Path) -> Result<(), String> {
+            let path_str = path.to_string_lossy().to_string();
+            if path_str.trim().is_empty() {
+                return Err("Default data directory path is empty.".to_string());
+            }
 
-            Command::new("sh")
-                .args(["-c", &command])
-                .spawn()
-                .map_err(|error| format!("Failed to schedule cleanup: {error}"))?;
+            #[cfg(target_os = "linux")]
+            {
+                use std::fs::OpenOptions;
+                use std::os::unix::process::CommandExt;
+                use std::process::Stdio;
+
+                let parent_pid = std::process::id();
+                let quoted_path = shell_quote_posix(&path_str);
+
+                let command = format!(
+                    "while kill -0 {parent_pid} 2>/dev/null; do sleep 0.2; done; \
+                     sleep 0.8; \
+                     i=0; \
+                     while [ $i -lt 20 ]; do \
+                       if [ ! -e {quoted_path} ]; then exit 0; fi; \
+                       rm -rf -- {quoted_path}; \
+                       if [ ! -e {quoted_path} ]; then exit 0; fi; \
+                       i=$((i+1)); \
+                       sleep 0.5; \
+                     done; \
+                     exit 1"
+                );
+
+                let devnull_in = OpenOptions::new()
+                    .read(true)
+                    .open("/dev/null")
+                    .map_err(|e| format!("Failed to open /dev/null for stdin: {e}"))?;
+                let devnull_out = OpenOptions::new()
+                    .write(true)
+                    .open("/dev/null")
+                    .map_err(|e| format!("Failed to open /dev/null for stdout: {e}"))?;
+                let devnull_err = OpenOptions::new()
+                    .write(true)
+                    .open("/dev/null")
+                    .map_err(|e| format!("Failed to open /dev/null for stderr: {e}"))?;
+
+                let mut cmd = Command::new("sh");
+                cmd.args(["-c", &command])
+                    .stdin(Stdio::from(devnull_in))
+                    .stdout(Stdio::from(devnull_out))
+                    .stderr(Stdio::from(devnull_err));
+
+                unsafe {
+                    cmd.pre_exec(|| {
+                        libc::setsid();
+                        Ok(())
+                    });
+                }
+
+                cmd.spawn()
+                    .map_err(|error| format!("Failed to schedule cleanup: {error}"))?;
+            }
+
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt;
+
+                const CREATE_NO_WINDOW: u32 = 0x08000000;
+                const DETACHED_PROCESS: u32 = 0x00000008;
+                const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
+
+                let quoted_path = shell_quote_powershell(&path_str);
+                let command = format!(
+                    "$target='{quoted_path}'; \
+                     for ($i=0; $i -lt 30; $i++) {{ \
+                         if (-not (Test-Path -LiteralPath $target)) {{ exit 0 }}; \
+                         Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue; \
+                         if (-not (Test-Path -LiteralPath $target)) {{ exit 0 }}; \
+                         Start-Sleep -Milliseconds 500; \
+                     }}; \
+                     exit 1"
+                );
+
+                Command::new("powershell")
+                    .args([
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-WindowStyle",
+                        "Hidden",
+                        "-Command",
+                        &command,
+                    ])
+                    .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+                    .spawn()
+                    .map_err(|error| format!("Failed to schedule Windows cleanup: {error}"))?;
+            }
+
+            #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+            {
+                let parent_pid = std::process::id();
+                let quoted_path = shell_quote_posix(&path_str);
+                let command = format!(
+                    "while kill -0 {parent_pid} 2>/dev/null; do sleep 0.2; done; \
+                     sleep 0.8; \
+                     rm -rf -- {quoted_path}"
+                );
+
+                Command::new("sh")
+                    .args(["-c", &command])
+                    .spawn()
+                    .map_err(|error| format!("Failed to schedule cleanup: {error}"))?;
+            }
+
+            Ok(())
         }
 
-        Ok(())
+        let default_dir = crate::app_paths::data_dir()?;
+        if let Err(error) = crate::app_paths::clear_app_data() {
+            eprintln!("[cleanup] immediate delete failed, will retry after exit: {error}");
+            schedule_delete_after_exit(default_dir.as_path())?;
+        }
     }
 
-    let default_dir = crate::app_paths::data_dir()?;
-    if let Err(error) = crate::app_paths::clear_app_data() {
-        eprintln!("[cleanup] immediate delete failed, will retry after exit: {error}");
-        schedule_delete_after_exit(default_dir.as_path())?;
+    #[cfg(target_os = "android")]
+    {
+        if let Err(error) = crate::app_paths::clear_app_data() {
+            eprintln!("[cleanup] failed to delete app data: {error}");
+        }
     }
+
     app_handle.exit(0);
     Ok(())
 }
@@ -616,6 +635,7 @@ fn poll_due_task_notifications(
         }
     }
 
+    #[cfg(not(target_os = "android"))]
     if let Some(first_task) = sent.first() {
         let mut pending = state
             .pending_notification_task_id
@@ -628,15 +648,27 @@ fn poll_due_task_notifications(
             eprintln!("[tray] failed to start tray flash effect: {error}");
         }
     }
+    #[cfg(target_os = "android")]
+    {
+        let _ = app_handle; // Use it to avoid unused variable warning
+    }
 
     Ok(sent)
 }
 
 #[tauri::command]
-fn flash_tray_icon(app_handle: AppHandle) -> Result<(), String> {
-    let state = app_handle.state::<SharedState>();
-    state.tray_alert_active.store(true, Ordering::SeqCst);
-    ensure_tray_flash_worker(app_handle)
+fn flash_tray_icon(_app_handle: AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        // Android doesn't have tray icons
+        Ok(())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let state = _app_handle.state::<SharedState>();
+        state.tray_alert_active.store(true, Ordering::SeqCst);
+        ensure_tray_flash_worker(_app_handle)
+    }
 }
 
 #[tauri::command]
@@ -645,6 +677,7 @@ fn exit_app(app_handle: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn minimize_to_tray(window: tauri::Window) -> Result<(), String> {
     window
@@ -652,19 +685,34 @@ fn minimize_to_tray(window: tauri::Window) -> Result<(), String> {
         .map_err(|e| format!("Failed to minimize to tray: {e}"))
 }
 
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn minimize_to_tray(_window: tauri::Window) -> Result<(), String> {
+    // On Android, minimize_to_tray does nothing (app goes to background via system)
+    Ok(())
+}
+
 fn show_main_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
+    #[cfg(not(target_os = "android"))]
+    {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
     }
-    clear_tray_notification_alert(app);
-    open_pending_summary_from_tray(app);
+    
+    #[cfg(not(target_os = "android"))]
+    {
+        clear_tray_notification_alert(app);
+        open_pending_summary_from_tray(app);
+    }
 }
 
 fn ignore_all_notifications(app: &AppHandle) {
     if let Some(state) = app.try_state::<SharedState>() {
         state.ignore_all_notifications.store(true, Ordering::SeqCst);
+        #[cfg(not(target_os = "android"))]
         state.tray_alert_active.store(false, Ordering::SeqCst);
 
         if let Ok(mut pending) = state.pending_notification_task_id.lock() {
@@ -672,11 +720,13 @@ fn ignore_all_notifications(app: &AppHandle) {
         }
     }
 
+    #[cfg(not(target_os = "android"))]
     if let Err(error) = set_tray_icon_notification_state(app, false) {
         eprintln!("[tray] failed to reset tray icon while ignoring notifications: {error}");
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn load_default_tray_icon() -> Result<Image<'static>, String> {
     Image::from_bytes(DEFAULT_TRAY_ICON_BYTES)
         .or_else(|_| Image::from_bytes(include_bytes!("../../icons/icon.ico")))
@@ -685,12 +735,14 @@ fn load_default_tray_icon() -> Result<Image<'static>, String> {
         })
 }
 
+#[cfg(not(target_os = "android"))]
 fn load_notification_tray_icon() -> Result<Image<'static>, String> {
     Image::from_bytes(NOTIFICATION_TRAY_ICON_BYTES).map_err(|error| {
         format!("Failed to load tray icon from icons/notification.png: {error}")
     })
 }
 
+#[cfg(not(target_os = "android"))]
 fn current_tray_id(app: &AppHandle) -> String {
     app.config()
         .app
@@ -700,6 +752,7 @@ fn current_tray_id(app: &AppHandle) -> String {
         .unwrap_or_else(|| "main".into())
 }
 
+#[cfg(not(target_os = "android"))]
 fn set_tray_icon_for_handle(
     app: &AppHandle,
     icon: Option<Image<'static>>,
@@ -712,6 +765,7 @@ fn set_tray_icon_for_handle(
         .map_err(|error| format!("Failed to set tray icon: {error}"))
 }
 
+#[cfg(not(target_os = "android"))]
 fn set_tray_icon_notification_state(app: &AppHandle, has_notification: bool) -> Result<(), String> {
     let icon = if has_notification {
         Some(load_notification_tray_icon()?)
@@ -721,6 +775,7 @@ fn set_tray_icon_notification_state(app: &AppHandle, has_notification: bool) -> 
     set_tray_icon_for_handle(app, icon)
 }
 
+#[cfg(not(target_os = "android"))]
 fn clear_tray_notification_alert(app: &AppHandle) {
     if let Some(state) = app.try_state::<SharedState>() {
         state.tray_alert_active.store(false, Ordering::SeqCst);
@@ -730,6 +785,7 @@ fn clear_tray_notification_alert(app: &AppHandle) {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn open_pending_summary_from_tray(app: &AppHandle) {
     let Some(state) = app.try_state::<SharedState>() else {
         return;
@@ -750,6 +806,7 @@ fn open_pending_summary_from_tray(app: &AppHandle) {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn ensure_tray_flash_worker(app_handle: AppHandle) -> Result<(), String> {
     use std::thread;
     use std::time::Duration;
@@ -810,7 +867,15 @@ fn show_system_notification(summary: &str, body: &str) -> Result<(), String> {
         .map_err(|error| format!("Windows notification failed: {error}"))
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "android")]
+fn show_system_notification(_summary: &str, _body: &str) -> Result<(), String> {
+    // Android notifications are handled via Tauri's built-in notification API
+    // For now, we just log that a notification would be sent
+    eprintln!("[notification] Android notification: {}", _body);
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "android")))]
 fn show_system_notification(_summary: &str, _body: &str) -> Result<(), String> {
     Ok(())
 }
@@ -832,17 +897,31 @@ pub fn run_gui_app() -> tauri::Result<()> {
     let runtime =
         initialize_runtime().map_err(|error| tauri::Error::Io(std::io::Error::other(error)))?;
 
-    tauri::Builder::default()
-        .manage(SharedState {
-            manager: Mutex::new(runtime.manager),
-            taskbar_path: Mutex::new(runtime.taskbar_path),
-            settings: Mutex::new(runtime.settings),
-            notified_task_ids: Mutex::new(HashSet::new()),
-            pending_notification_task_id: Mutex::new(None),
-            tray_alert_active: AtomicBool::new(false),
-            tray_flash_worker_running: AtomicBool::new(false),
-            ignore_all_notifications: AtomicBool::new(false),
-        })
+    #[cfg(not(target_os = "android"))]
+    let shared_state = SharedState {
+        manager: Mutex::new(runtime.manager),
+        taskbar_path: Mutex::new(runtime.taskbar_path),
+        settings: Mutex::new(runtime.settings),
+        notified_task_ids: Mutex::new(HashSet::new()),
+        pending_notification_task_id: Mutex::new(None),
+        tray_alert_active: AtomicBool::new(false),
+        tray_flash_worker_running: AtomicBool::new(false),
+        ignore_all_notifications: AtomicBool::new(false),
+    };
+
+    #[cfg(target_os = "android")]
+    let shared_state = SharedState {
+        manager: Mutex::new(runtime.manager),
+        taskbar_path: Mutex::new(runtime.taskbar_path),
+        settings: Mutex::new(runtime.settings),
+        notified_task_ids: Mutex::new(HashSet::new()),
+        pending_notification_task_id: Mutex::new(None),
+        ignore_all_notifications: AtomicBool::new(false),
+    };
+
+    #[cfg(not(target_os = "android"))]
+    let mut builder = tauri::Builder::default()
+        .manage(shared_state)
         .invoke_handler(tauri::generate_handler![
             load_app_state,
             create_task,
@@ -863,65 +942,96 @@ pub fn run_gui_app() -> tauri::Result<()> {
             flash_tray_icon,
             exit_app,
             minimize_to_tray
-        ])
-        .setup(|app| {
-            let tray_id = current_tray_id(app.handle());
+        ]);
 
-            if let Some(tray) = app.tray_by_id(&tray_id) {
-                let menu = MenuBuilder::new(app)
-                    .text("tray_show", "Show Window")
-                    .separator()
-                    .text("tray_ignore_notifications", "Ignore All Notifications")
-                    .separator()
-                    .text("tray_quit", "Quit")
-                    .build()?;
-                tray.set_menu(Some(menu))?;
-                if let Ok(icon) = load_default_tray_icon() {
-                    let _ = tray.set_icon(Some(icon));
-                }
-            }
+    #[cfg(target_os = "android")]
+    let builder = tauri::Builder::default()
+        .manage(shared_state)
+        .invoke_handler(tauri::generate_handler![
+            load_app_state,
+            create_task,
+            update_task,
+            update_task_with_options,
+            delete_task,
+            toggle_task_pinned,
+            set_task_state,
+            move_task,
+            clear_all_tasks,
+            undo_last_change,
+            save_gui_settings_cmd,
+            set_theme,
+            import_theme_file_cmd,
+            delete_all_data_and_exit,
+            reload_taskbar_file,
+            poll_due_task_notifications,
+            flash_tray_icon,
+            exit_app,
+            minimize_to_tray
+        ]);
 
-            Ok(())
-        })
-        .on_menu_event(|app, event| {
-            if event.id() == "tray_show" {
-                show_main_window(app);
-            } else if event.id() == "tray_ignore_notifications" {
-                ignore_all_notifications(app);
-            } else if event.id() == "tray_quit" {
-                app.exit(0);
-            }
-        })
-        .on_tray_icon_event(|app, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                show_main_window(app);
-            }
-        })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
+    #[cfg(not(target_os = "android"))]
+    {
+        builder = builder
+            .setup(|app| {
+                let tray_id = current_tray_id(app.handle());
 
-                // Try to trigger the close confirmation dialog on frontend
-                let handle = window.app_handle().clone();
-                let window_label = window.label().to_string();
-
-                // Use a webview to call the close handler function
-                std::thread::spawn(move || {
-                    // Give the event loop time to process
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-
-                    if let Some(w) = handle.get_webview_window(&window_label) {
-                        // Call the JavaScript function directly through eval
-                        let script = "window.handleCloseRequest?.()";
-                        let _ = w.eval(script);
+                if let Some(tray) = app.tray_by_id(&tray_id) {
+                    let menu = MenuBuilder::new(app)
+                        .text("tray_show", "Show Window")
+                        .separator()
+                        .text("tray_ignore_notifications", "Ignore All Notifications")
+                        .separator()
+                        .text("tray_quit", "Quit")
+                        .build()?;
+                    tray.set_menu(Some(menu))?;
+                    if let Ok(icon) = load_default_tray_icon() {
+                        let _ = tray.set_icon(Some(icon));
                     }
-                });
-            }
-        })
-        .run(tauri::generate_context!())
+                }
+
+                Ok(())
+            })
+            .on_menu_event(|app, event| {
+                if event.id() == "tray_show" {
+                    show_main_window(app);
+                } else if event.id() == "tray_ignore_notifications" {
+                    ignore_all_notifications(app);
+                } else if event.id() == "tray_quit" {
+                    app.exit(0);
+                }
+            })
+            .on_tray_icon_event(|app, event| {
+                if let TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } = event
+                {
+                    show_main_window(app);
+                }
+            })
+            .on_window_event(|window, event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+
+                    // Try to trigger the close confirmation dialog on frontend
+                    let handle = window.app_handle().clone();
+                    let window_label = window.label().to_string();
+
+                    // Use a webview to call the close handler function
+                    std::thread::spawn(move || {
+                        // Give the event loop time to process
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+
+                        if let Some(w) = handle.get_webview_window(&window_label) {
+                            // Call the JavaScript function directly through eval
+                            let script = "window.handleCloseRequest?.()";
+                            let _ = w.eval(script);
+                        }
+                    });
+                }
+            });
+    }
+
+    builder.run(tauri::generate_context!())
 }

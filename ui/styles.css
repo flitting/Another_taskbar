@@ -1049,3 +1049,232 @@ select:focus {
         grid-template-columns: 1fr;
     }
 }
+
+.task-swipe-shell {
+    position: relative;
+}
+
+.task-swipe-actions {
+    display: none;
+}
+
+.task-title-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+body.phone-ui .board {
+    margin: 8px;
+    padding: 10px;
+    min-height: calc(100vh - 16px);
+}
+
+body.phone-ui {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
+}
+
+body.phone-ui .toolbar {
+    gap: 8px;
+}
+
+body.phone-ui .toolbar h1 {
+    font-size: 22px;
+    line-height: 1.1;
+}
+
+body.phone-ui .toolbar-actions {
+    gap: 6px;
+}
+
+body.phone-ui button,
+body.phone-ui input,
+body.phone-ui select,
+body.phone-ui textarea {
+    border-radius: 10px;
+    padding: 7px 10px;
+}
+
+body.phone-ui .task-board {
+    margin-top: 8px;
+    min-height: 68vh;
+    max-height: 70vh;
+}
+
+body.phone-ui .task-item {
+    margin: 3px;
+    padding: 0;
+    background: transparent;
+}
+
+body.phone-ui .task-main {
+    grid-template-columns: 18px 16px 28px minmax(0, 1fr) auto;
+    gap: 1px;
+    padding: 10px 8px;
+    min-height: 84px;
+    border-radius: 10px;
+    background: var(--row);
+    transition: transform 0.2s ease;
+    will-change: transform;
+}
+
+body.phone-ui .task-item.swiped > .task-swipe-shell > .task-main {
+    transform: translateX(-138px);
+    width: calc(100% - 138px);
+}
+
+body.phone-ui .task-swipe-shell {
+    overflow: hidden;
+    border-radius: 10px;
+}
+
+body.phone-ui .task-swipe-actions {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 138px;
+    display: flex;
+    align-items: center;
+    justify-content: space-evenly;
+    padding: 4px 8px;
+    background: color-mix(in srgb, var(--panel-soft) 94%, black 6%);
+    border: 1px solid color-mix(in srgb, var(--border) 26%, transparent);
+}
+
+body.phone-ui .task-swipe-actions button {
+    min-width: 34px;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 8px;
+    font-size: 17px;
+}
+
+body.phone-ui .drag-handle,
+body.phone-ui .caret {
+    font-size: 13px;
+    width: 16px;
+}
+
+body.phone-ui .circle {
+    width: 24px;
+    border-radius: 8px;
+    padding: 3px 0;
+    font-size: 13px;
+}
+
+body.phone-ui .task-title {
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 5px;
+    line-height: 1.2;
+}
+
+body.phone-ui .task-title-top {
+    justify-content: space-between;
+    gap: 6px;
+}
+
+body.phone-ui .task-name-text {
+    font-size: 18px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+body.phone-ui .task-due {
+    margin-left: 0;
+    font-size: 12px;
+    flex: 0 0 auto;
+    max-width: 46%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.phone-ui .task-desc-preview {
+    max-width: 100%;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+body.phone-ui .task-meta {
+    min-width: 18px;
+    justify-content: center;
+}
+
+body.phone-ui .stripes {
+    width: 12px;
+    min-height: 24px;
+    gap: 1px;
+}
+
+body.phone-ui .stripe {
+    width: 5px;
+    min-height: 24px;
+    border-radius: 2px;
+}
+
+body.phone-ui .quick {
+    display: none !important;
+}
+
+body.phone-ui .modal {
+    width: min(94vw, 430px);
+    max-width: 94vw;
+    border-radius: 14px;
+    padding: 10px 11px;
+}
+
+body.phone-ui .task-modal,
+body.phone-ui .settings-modal,
+body.phone-ui .filter-modal,
+body.phone-ui .time-modal,
+body.phone-ui .recurrence-modal,
+body.phone-ui .summary-modal,
+body.phone-ui .confirm-modal,
+body.phone-ui .close-modal {
+    width: min(94vw, 430px);
+    max-width: 94vw;
+}
+
+body.phone-ui .settings-modal {
+    width: min(86vw, 340px);
+    max-width: 86vw;
+}
+
+body.phone-ui .settings-modal .modal-body,
+body.phone-ui .task-modal .modal-body {
+    max-height: min(58vh, 420px);
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+body.phone-ui .settings-modal .modal-body::-webkit-scrollbar,
+body.phone-ui .task-modal .modal-body::-webkit-scrollbar {
+    width: 10px;
+}
+
+body.phone-ui .settings-modal .modal-body::-webkit-scrollbar-track,
+body.phone-ui .task-modal .modal-body::-webkit-scrollbar-track {
+    background: color-mix(in srgb, var(--panel) 84%, black 16%);
+    border-radius: 999px;
+}
+
+body.phone-ui .settings-modal .modal-body::-webkit-scrollbar-thumb,
+body.phone-ui .task-modal .modal-body::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--accent-2) 70%, white 30%);
+    border-radius: 999px;
+    border: 2px solid color-mix(in srgb, var(--panel) 84%, black 16%);
+}
+
+body.phone-ui .modal-head h2 {
+    font-size: clamp(18px, 5vw, 24px);
+}
+
+body.phone-ui .modal-foot {
+    flex-wrap: wrap;
+}

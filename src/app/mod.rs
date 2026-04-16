@@ -1,9 +1,16 @@
+#[cfg(feature = "desktop")]
 mod cli;
 mod gui;
 pub mod runtime;
 
+#[cfg(feature = "desktop")]
 pub use cli::run_cli;
 pub use gui::run_gui;
+
+#[cfg(not(feature = "desktop"))]
+pub fn run_cli() {
+    panic!("CLI mode is not available on this platform");
+}
 
 /// Parse the command-line arguments to determine which mode to run.
 /// Returns "gui" by default, or "cli" if --cli/-c is specified.

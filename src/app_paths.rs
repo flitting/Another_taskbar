@@ -1,23 +1,77 @@
 use std::fs;
 use std::path::PathBuf;
 
+#[cfg(all(not(target_os = "android"), feature = "desktop"))]
 use directories::BaseDirs;
 
 #[cfg(target_os = "windows")]
 const APP_DIR_NAME: &str = "AnotherTaskbar";
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(any(target_os = "windows", target_os = "android")))]
 const APP_DIR_NAME: &str = "another_taskbar";
+#[cfg(target_os = "android")]
+const APP_DIR_NAME: &str = "another_taskbar"; // Mostly unused on Android
 const GUI_SETTINGS_FILE_NAME: &str = "config.toml";
 const TASKBAR_FILE_NAME: &str = "tasks.json";
 const THEMES_DIR_NAME: &str = "themes";
 const CACHE_DIR_NAME: &str = "cache";
 
+#[cfg(target_os = "android")]
 fn app_dir() -> Result<PathBuf, String> {
-    let home = BaseDirs::new()
-        .ok_or_else(|| "Could not determine user home directory for this platform.".to_string())?
-        .home_dir()
-        .to_path_buf();
-    Ok(home.join(APP_DIR_NAME))
+    // On Android, try a set of candidate directories and pick the first
+    // writable one to avoid startup failures on restricted paths.
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    if let Ok(app_data_dir) = std::env::var("APP_DATA_DIR") {
+        if !app_data_dir.trim().is_empty() {
+            candidates.push(PathBuf::from(app_data_dir));
+        }
+    }
+
+    if let Ok(home_dir) = std::env::var("HOME") {
+        if !home_dir.trim().is_empty() {
+            candidates.push(PathBuf::from(home_dir).join("another_taskbar"));
+        }
+    }
+
+    if let Ok(tmp_dir) = std::env::var("TMPDIR") {
+        if !tmp_dir.trim().is_empty() {
+            candidates.push(PathBuf::from(tmp_dir).join("another_taskbar"));
+        }
+    }
+
+    // Last-resort fallback for Android internal storage layout.
+    candidates.push(PathBuf::from(
+        "/data/user/0/io.anothertaskbar.mobile/files/another_taskbar",
+    ));
+
+    let mut last_error: Option<String> = None;
+    for candidate in candidates {
+        match fs::create_dir_all(&candidate) {
+            Ok(_) => return Ok(candidate),
+            Err(error) => {
+                last_error = Some(format!("Failed to create '{}': {error}", candidate.display()));
+            }
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| "Failed to resolve writable app dir".to_string()))
+}
+
+#[cfg(not(target_os = "android"))]
+fn app_dir() -> Result<PathBuf, String> {
+    #[cfg(feature = "desktop")]
+    {
+        let home = BaseDirs::new()
+            .ok_or_else(|| "Could not determine user home directory for this platform.".to_string())?
+            .home_dir()
+            .to_path_buf();
+        Ok(home.join(APP_DIR_NAME))
+    }
+    #[cfg(not(feature = "desktop"))]
+    {
+        // Fallback for non-desktop builds (shouldn't happen in practice)
+        Ok(std::env::current_dir().unwrap_or_default())
+    }
 }
 
 pub fn config_dir() -> Result<PathBuf, String> {

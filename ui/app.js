@@ -193,7 +193,19 @@ const app = {
   },
   dueNotificationTimer: null,
   strings: {},
+  phoneUi: false,
+  swipe: {
+    pointerId: null,
+    activeTaskId: null,
+    baseOffset: 0,
+    currentOffset: 0,
+    startX: 0,
+    startY: 0,
+    horizontal: false,
+  },
 };
+
+const SWIPE_ACTION_WIDTH = 138;
 
 function setError(message) {
   const text = (message || "").trim();
@@ -244,6 +256,116 @@ function applyUiScale(value) {
   if (els.settingsUiScaleValue) {
     els.settingsUiScaleValue.textContent = `${Math.round(clamped * 100)}%`;
   }
+}
+
+function detectPhoneUi() {
+  const smallScreen = window.matchMedia("(max-width: 820px)").matches;
+  const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
+  return smallScreen || coarsePointer;
+}
+
+function setTaskSwiped(li, main, open) {
+  li.classList.toggle("swiped", open);
+  main.style.transform = "";
+}
+
+function closeSwipeActions(exceptTaskId = null) {
+  document.querySelectorAll(".task-item.swiped").forEach((node) => {
+    if (!(node instanceof HTMLElement)) return;
+    if (
+      exceptTaskId != null &&
+      Number(node.dataset.id || "0") === Number(exceptTaskId)
+    ) {
+      return;
+    }
+    node.classList.remove("swiped");
+    const main = node.querySelector(".task-main");
+    if (main instanceof HTMLElement) {
+      main.style.transform = "";
+    }
+  });
+}
+
+function updatePhoneUiClass() {
+  const next = detectPhoneUi();
+  if (app.phoneUi === next) return;
+  app.phoneUi = next;
+  document.body.classList.toggle("phone-ui", next);
+  if (!next) closeSwipeActions();
+}
+
+function wireSwipeForTaskItem(li, swipeShell, main, taskId) {
+  swipeShell.addEventListener("pointerdown", (event) => {
+    if (!app.phoneUi) return;
+    if (event.pointerType === "mouse") return;
+    if (event.button !== 0) return;
+    if (
+      event.target instanceof Element &&
+      event.target.closest(
+        ".drag-handle, .caret, .state-wrap, .state-menu, .task-swipe-actions, .quick, .select-list, .select-menu",
+      )
+    ) {
+      return;
+    }
+    const rect = swipeShell.getBoundingClientRect();
+    const startFromRightSide = event.clientX >= rect.left + rect.width * 0.4;
+    if (!startFromRightSide) return;
+
+    app.swipe.pointerId = event.pointerId;
+    app.swipe.activeTaskId = taskId;
+    app.swipe.startX = event.clientX;
+    app.swipe.startY = event.clientY;
+    app.swipe.baseOffset = li.classList.contains("swiped")
+      ? -SWIPE_ACTION_WIDTH
+      : 0;
+    app.swipe.currentOffset = app.swipe.baseOffset;
+    app.swipe.horizontal = false;
+
+    closeSwipeActions(taskId);
+    swipeShell.setPointerCapture(event.pointerId);
+  });
+
+  swipeShell.addEventListener("pointermove", (event) => {
+    if (!app.phoneUi) return;
+    if (app.swipe.pointerId !== event.pointerId) return;
+    if (app.swipe.activeTaskId !== taskId) return;
+
+    const dx = event.clientX - app.swipe.startX;
+    const dy = event.clientY - app.swipe.startY;
+    if (!app.swipe.horizontal) {
+      if (Math.abs(dx) < 8) return;
+      if (Math.abs(dy) > Math.abs(dx)) {
+        app.swipe.pointerId = null;
+        app.swipe.activeTaskId = null;
+        return;
+      }
+      app.swipe.horizontal = true;
+    }
+
+    event.preventDefault();
+    const offset = Math.max(
+      -SWIPE_ACTION_WIDTH,
+      Math.min(0, app.swipe.baseOffset + dx),
+    );
+    app.swipe.currentOffset = offset;
+    main.style.transform = `translateX(${offset}px)`;
+  });
+
+  const settle = (event) => {
+    if (!app.phoneUi) return;
+    if (app.swipe.pointerId !== event.pointerId) return;
+    if (app.swipe.activeTaskId !== taskId) return;
+    const open = app.swipe.currentOffset <= -SWIPE_ACTION_WIDTH * 0.55;
+    setTaskSwiped(li, main, open);
+
+    app.swipe.pointerId = null;
+    app.swipe.activeTaskId = null;
+    app.swipe.horizontal = false;
+    app.swipe.currentOffset = 0;
+  };
+
+  swipeShell.addEventListener("pointerup", settle);
+  swipeShell.addEventListener("pointercancel", settle);
 }
 
 function askConfirmation(title, message, confirmLabel = null) {
@@ -1921,7 +2043,19 @@ function openTaskSummaryModal(taskId) {
   els.summaryTagsRow.textContent = tags
     ? `${t("tags", "Tags")}: ${tags}`
     : `${t("tags", "Tags")}: ${t("none", "None")}`;
-  els.summaryTimesRow.textContent = `${t("created_at", "Created at")}: ${formatDateTime(task.times?.created_at)} | ${t("updated_at", "Updated at")}: ${formatDateTime(task.times?.updated_at)}`;
+  const dueText = task.times?.due_date
+    ? t("due_value", "Due: {value}").replace(
+        "{value}",
+        formatDateTime(task.times.due_date),
+      )
+    : t("due_none", "Due: None");
+  const completedText = task.times?.completed_at
+    ? t("completed_value", "Completed: {value}").replace(
+        "{value}",
+        formatDateTime(task.times.completed_at),
+      )
+    : t("completed_none", "Completed: None");
+  els.summaryTimesRow.textContent = `${t("created_at", "Created at")}: ${formatDateTime(task.times?.created_at)} | ${t("updated_at", "Updated at")}: ${formatDateTime(task.times?.updated_at)} | ${dueText} | ${completedText}`;
   els.summaryModal.showModal();
 }
 
@@ -2331,6 +2465,8 @@ function renderTaskRow(task, depth, parentId = 0) {
 
   const main = document.createElement("div");
   main.className = "task-main";
+  const swipeShell = document.createElement("div");
+  swipeShell.className = "task-swipe-shell";
 
   const hasChildren = (task.subtasks || []).length > 0;
 
@@ -2460,12 +2596,15 @@ function renderTaskRow(task, depth, parentId = 0) {
   if (task.state === "Completed" || task.state === "Blocked") {
     title.classList.add("state-crossed");
   }
+  const titleTop = document.createElement("div");
+  titleTop.className = "task-title-top";
   const nameSpan = document.createElement("span");
   nameSpan.className = "task-name-text";
   nameSpan.textContent = task.name || "Untitled";
-  title.append(nameSpan);
+  titleTop.append(nameSpan);
 
-  const descPreview = truncateText(task.description, 52);
+  const descPreview = truncateText(task.description, 80);
+  title.append(titleTop);
   if (descPreview) {
     const descSpan = document.createElement("span");
     descSpan.className = "task-desc-preview";
@@ -2485,7 +2624,7 @@ function renderTaskRow(task, depth, parentId = 0) {
       dueSpan,
       `${t("due_none", "Due").split(/[:：]/)[0]}: ${formatDateTime(task.times.due_date)}`,
     );
-    title.append(dueSpan);
+    titleTop.append(dueSpan);
   }
   title.addEventListener("click", () => {
     app.selectedId = task.id;
@@ -2523,6 +2662,37 @@ function renderTaskRow(task, depth, parentId = 0) {
   });
 
   quick.append(detailBtn, star, plus);
+
+  const swipeActions = document.createElement("div");
+  swipeActions.className = "task-swipe-actions";
+  const detailSwipeBtn = document.createElement("button");
+  detailSwipeBtn.textContent = "⚙";
+  setTip(detailSwipeBtn, t("open_detail", "Open details"));
+  detailSwipeBtn.addEventListener("click", () => {
+    closeSwipeActions();
+    app.selectedId = task.id;
+    openTaskModalEdit(task.id);
+  });
+  const starSwipeBtn = document.createElement("button");
+  starSwipeBtn.textContent = task.pinned ? "★" : "☆";
+  setTip(
+    starSwipeBtn,
+    task.pinned ? t("filter_unpinned", "Unpin") : t("filter_pinned", "Pin"),
+  );
+  starSwipeBtn.addEventListener("click", async () => {
+    closeSwipeActions();
+    await safeInvoke("toggle_task_pinned", { id: task.id });
+    await refresh();
+  });
+  const plusSwipeBtn = document.createElement("button");
+  plusSwipeBtn.textContent = "+";
+  setTip(plusSwipeBtn, t("create_root_help", "Create subtask"));
+  plusSwipeBtn.addEventListener("click", () => {
+    closeSwipeActions();
+    app.selectedId = task.id;
+    openTaskModalCreate(task.id);
+  });
+  swipeActions.append(detailSwipeBtn, starSwipeBtn, plusSwipeBtn);
   content.append(title);
   if (stripes.childElementCount > 0) {
     if (stripes.childElementCount === 1) {
@@ -2532,7 +2702,8 @@ function renderTaskRow(task, depth, parentId = 0) {
   }
   meta.append(quick);
   main.append(handle, caret, stateWrap, content, meta);
-  li.append(main);
+  swipeShell.append(main, swipeActions);
+  li.append(swipeShell);
 
   if (hasChildren && !app.collapsed.has(task.id)) {
     const sub = document.createElement("ul");
@@ -2544,6 +2715,7 @@ function renderTaskRow(task, depth, parentId = 0) {
   }
 
   wireDragForTaskItem(li, handle, task.id);
+  wireSwipeForTaskItem(li, swipeShell, main, task.id);
 
   return li;
 }
@@ -2871,9 +3043,13 @@ document.addEventListener("pointerdown", (event) => {
   if (!event.target.closest(".select-list")) {
     closeAllSelectMenus();
   }
+  if (!event.target.closest(".task-swipe-shell, .task-swipe-actions")) {
+    closeSwipeActions();
+  }
 });
 
 window.addEventListener("resize", () => {
+  updatePhoneUiClass();
   updateOpenSelectMenuPositions();
 });
 document.addEventListener(
@@ -2885,6 +3061,7 @@ document.addEventListener(
 );
 
 els.taskBoard.addEventListener("mousemove", (event) => {
+  if (app.phoneUi) return;
   const rect = els.taskBoard.getBoundingClientRect();
   const rightZone = rect.width - 180;
   const x = event.clientX - rect.left;
@@ -3100,4 +3277,5 @@ window.handleTrayOpenWithNotification = handleTrayOpenWithNotification;
 setupHoverTips();
 setupDatePickerGuard();
 startDueNotificationPolling();
+updatePhoneUiClass();
 refresh().then(() => checkNotifications());

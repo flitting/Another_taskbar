@@ -1,4 +1,5 @@
 /target
 taskbar.json
-/gen/schemas
+/gen
+.idea
 

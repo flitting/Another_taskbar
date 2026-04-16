@@ -1,11 +1,17 @@
 use crate::app::runtime::initialize_runtime;
 use crate::files::save_taskbar;
 use crate::input_parse::{parse_input, CliAction};
+#[cfg(feature = "desktop")]
 use rustyline::completion::{Completer, Pair};
+#[cfg(feature = "desktop")]
 use rustyline::error::ReadlineError;
+#[cfg(feature = "desktop")]
 use rustyline::highlight::Highlighter;
+#[cfg(feature = "desktop")]
 use rustyline::hint::Hinter;
+#[cfg(feature = "desktop")]
 use rustyline::validate::Validator;
+#[cfg(feature = "desktop")]
 use rustyline::{Context, Editor, Helper};
 
 /// Custom completer for command auto-completion

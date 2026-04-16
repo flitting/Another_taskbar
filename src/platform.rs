@@ -21,4 +21,6 @@ pub fn hide_console_for_gui_if_standalone() {
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn hide_console_for_gui_if_standalone() {}
+pub fn hide_console_for_gui_if_standalone() {
+    // No-op for non-Windows platforms
+}
