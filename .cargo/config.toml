@@ -1,0 +1,6 @@
+[env]
+GTK_PATH = { value = "/usr/lib/x86_64-linux-gnu/gtk-3.0", force = true }
+GTK_EXE_PREFIX = { value = "/usr", force = true }
+GTK_DATA_PREFIX = { value = "/usr", force = true }
+GTK_MODULES = { value = "", force = true }
+GTK3_MODULES = { value = "", force = true }
