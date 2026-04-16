@@ -530,14 +530,6 @@ async function invokeCreateTask(parentId, draft) {
   }
 }
 
-async function invokeSetTaskState(id, state) {
-  try {
-    return await safeInvoke("set_task_state", { id, taskState: state });
-  } catch {
-    return await safeInvoke("set_task_state", { id, task_state: state });
-  }
-}
-
 async function invokeSetTaskStateWithOptions(id, state, cascadeDescendants) {
   try {
     return await safeInvoke("set_task_state", {

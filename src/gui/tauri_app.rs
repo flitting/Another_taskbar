@@ -585,22 +585,6 @@ fn reload_taskbar_file(state: State<'_, SharedState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn check_upcoming_tasks(
-    state: State<'_, SharedState>,
-    minutes_threshold: Option<i64>,
-) -> Result<Vec<crate::tasks::DueTaskNotification>, String> {
-    let manager = state
-        .manager
-        .lock()
-        .map_err(|_| "Failed to lock task manager state".to_string())?;
-
-    let threshold = minutes_threshold.unwrap_or(15);
-    let upcoming = crate::tasks::find_tasks_due_soon(&manager.root.subtasks, threshold);
-
-    Ok(upcoming)
-}
-
-#[tauri::command]
 fn poll_due_task_notifications(
     app_handle: AppHandle,
     state: State<'_, SharedState>,
@@ -642,14 +626,6 @@ fn poll_due_task_notifications(
     }
 
     Ok(sent)
-}
-
-#[tauri::command]
-fn send_test_notification() -> Result<(), String> {
-    show_system_notification(
-        "Another Taskbar",
-        "Test notification: Another Taskbar notifications are active.",
-    )
 }
 
 #[tauri::command]
@@ -863,9 +839,7 @@ pub fn run_gui_app() -> tauri::Result<()> {
             import_theme_file_cmd,
             delete_all_data_and_exit,
             reload_taskbar_file,
-            check_upcoming_tasks,
             poll_due_task_notifications,
-            send_test_notification,
             flash_tray_icon,
             exit_app,
             minimize_to_tray

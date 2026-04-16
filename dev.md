@@ -8,6 +8,6 @@
 -[x] add more fonts and themes.
 -[ ] anroid application.
 -[ ] cloud sync.
--[ ] pop up notification when the time is up.
+-[x] pop up notification when the time is up.
 -[ ] test cli for windows.
 -[ ] background application.
