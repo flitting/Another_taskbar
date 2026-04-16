@@ -1,9 +1,14 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, State};
+use tauri::image::Image;
+use tauri::menu::MenuBuilder;
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
+use tauri::{AppHandle, Manager, State};
 
 use crate::app::runtime::{
     ensure_taskbar_file, initialize_runtime, load_or_initialize_manager, persist_manager,
@@ -21,7 +26,14 @@ struct SharedState {
     manager: Mutex<TaskManager>,
     taskbar_path: Mutex<PathBuf>,
     settings: Mutex<GuiSettings>,
+    notified_task_ids: Mutex<HashSet<u32>>,
+    pending_notification_task_id: Mutex<Option<u32>>,
+    tray_alert_active: AtomicBool,
+    tray_flash_worker_running: AtomicBool,
 }
+
+const DEFAULT_TRAY_ICON_BYTES: &[u8] = include_bytes!("../../icons/icon.png");
+const NOTIFICATION_TRAY_ICON_BYTES: &[u8] = include_bytes!("../../icons/notification.png");
 
 #[derive(Debug, Serialize)]
 struct AppSnapshot {
@@ -572,6 +584,252 @@ fn reload_taskbar_file(state: State<'_, SharedState>) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn check_upcoming_tasks(
+    state: State<'_, SharedState>,
+    minutes_threshold: Option<i64>,
+) -> Result<Vec<crate::tasks::DueTaskNotification>, String> {
+    let manager = state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock task manager state".to_string())?;
+
+    let threshold = minutes_threshold.unwrap_or(15);
+    let upcoming = crate::tasks::find_tasks_due_soon(&manager.root.subtasks, threshold);
+
+    Ok(upcoming)
+}
+
+#[tauri::command]
+fn poll_due_task_notifications(
+    app_handle: AppHandle,
+    state: State<'_, SharedState>,
+    minutes_threshold: Option<i64>,
+) -> Result<Vec<crate::tasks::DueTaskNotification>, String> {
+    let manager = state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock task manager state".to_string())?;
+
+    let threshold = minutes_threshold.unwrap_or(15);
+    let upcoming = crate::tasks::find_tasks_due_soon(&manager.root.subtasks, threshold);
+    drop(manager);
+
+    let mut sent = Vec::new();
+    let mut notified = state
+        .notified_task_ids
+        .lock()
+        .map_err(|_| "Failed to lock notification state".to_string())?;
+
+    for task in upcoming {
+        if notified.insert(task.task_id) {
+            show_due_notification(&task);
+            sent.push(task);
+        }
+    }
+
+    if let Some(first_task) = sent.first() {
+        let mut pending = state
+            .pending_notification_task_id
+            .lock()
+            .map_err(|_| "Failed to lock pending notification state".to_string())?;
+        *pending = Some(first_task.task_id);
+        state.tray_alert_active.store(true, Ordering::SeqCst);
+        drop(pending);
+        if let Err(error) = flash_tray_icon(app_handle.clone()) {
+            eprintln!("[tray] failed to start tray flash effect: {error}");
+        }
+    }
+
+    Ok(sent)
+}
+
+#[tauri::command]
+fn send_test_notification() -> Result<(), String> {
+    show_system_notification(
+        "Another Taskbar",
+        "Test notification: Another Taskbar notifications are active.",
+    )
+}
+
+#[tauri::command]
+fn flash_tray_icon(app_handle: AppHandle) -> Result<(), String> {
+    let state = app_handle.state::<SharedState>();
+    state.tray_alert_active.store(true, Ordering::SeqCst);
+    ensure_tray_flash_worker(app_handle)
+}
+
+#[tauri::command]
+fn exit_app(app_handle: AppHandle) -> Result<(), String> {
+    app_handle.exit(0);
+    Ok(())
+}
+
+#[tauri::command]
+fn minimize_to_tray(window: tauri::Window) -> Result<(), String> {
+    window
+        .hide()
+        .map_err(|e| format!("Failed to minimize to tray: {e}"))
+}
+
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+    clear_tray_notification_alert(app);
+    open_pending_summary_from_tray(app);
+}
+
+fn load_default_tray_icon() -> Result<Image<'static>, String> {
+    Image::from_bytes(DEFAULT_TRAY_ICON_BYTES)
+        .or_else(|_| Image::from_bytes(include_bytes!("../../icons/icon.ico")))
+        .map_err(|error| {
+            format!("Failed to load tray icon from icons/icon.png or icons/icon.ico: {error}")
+        })
+}
+
+fn load_notification_tray_icon() -> Result<Image<'static>, String> {
+    Image::from_bytes(NOTIFICATION_TRAY_ICON_BYTES).map_err(|error| {
+        format!("Failed to load tray icon from icons/notification.png: {error}")
+    })
+}
+
+fn current_tray_id(app: &AppHandle) -> String {
+    app.config()
+        .app
+        .tray_icon
+        .as_ref()
+        .and_then(|config| config.id.clone())
+        .unwrap_or_else(|| "main".into())
+}
+
+fn set_tray_icon_for_handle(
+    app: &AppHandle,
+    icon: Option<Image<'static>>,
+) -> Result<(), String> {
+    let tray_id = current_tray_id(app);
+    let tray = app
+        .tray_by_id(&tray_id)
+        .ok_or_else(|| format!("Tray with id '{tray_id}' was not found"))?;
+    tray.set_icon(icon)
+        .map_err(|error| format!("Failed to set tray icon: {error}"))
+}
+
+fn set_tray_icon_notification_state(app: &AppHandle, has_notification: bool) -> Result<(), String> {
+    let icon = if has_notification {
+        Some(load_notification_tray_icon()?)
+    } else {
+        Some(load_default_tray_icon()?)
+    };
+    set_tray_icon_for_handle(app, icon)
+}
+
+fn clear_tray_notification_alert(app: &AppHandle) {
+    if let Some(state) = app.try_state::<SharedState>() {
+        state.tray_alert_active.store(false, Ordering::SeqCst);
+    }
+    if let Err(error) = set_tray_icon_notification_state(app, false) {
+        eprintln!("[tray] failed to reset tray icon after opening app: {error}");
+    }
+}
+
+fn open_pending_summary_from_tray(app: &AppHandle) {
+    let Some(state) = app.try_state::<SharedState>() else {
+        return;
+    };
+    let mut pending = match state.pending_notification_task_id.lock() {
+        Ok(guard) => guard,
+        Err(_) => return,
+    };
+    let Some(task_id) = *pending else {
+        return;
+    };
+    *pending = None;
+    drop(pending);
+
+    if let Some(window) = app.get_webview_window("main") {
+        let script = format!("window.handleTrayOpenWithNotification?.({task_id});");
+        let _ = window.eval(script.as_str());
+    }
+}
+
+fn ensure_tray_flash_worker(app_handle: AppHandle) -> Result<(), String> {
+    use std::thread;
+    use std::time::Duration;
+
+    let state = app_handle.state::<SharedState>();
+    if state
+        .tray_flash_worker_running
+        .swap(true, Ordering::SeqCst)
+    {
+        return Ok(());
+    }
+
+    let default_icon = load_default_tray_icon()?;
+    let notification_icon = load_notification_tray_icon()?;
+    let handle = app_handle.clone();
+
+    thread::spawn(move || {
+        loop {
+            let Some(state) = handle.try_state::<SharedState>() else {
+                break;
+            };
+
+            if !state.tray_alert_active.load(Ordering::SeqCst) {
+                break;
+            }
+            let _ = set_tray_icon_for_handle(&handle, Some(notification_icon.clone()));
+            thread::sleep(Duration::from_millis(300));
+
+            if !state.tray_alert_active.load(Ordering::SeqCst) {
+                break;
+            }
+            let _ = set_tray_icon_for_handle(&handle, Some(default_icon.clone()));
+            thread::sleep(Duration::from_millis(300));
+        }
+
+        if let Some(state) = handle.try_state::<SharedState>() {
+            state
+                .tray_flash_worker_running
+                .store(false, Ordering::SeqCst);
+            let alert_active = state.tray_alert_active.load(Ordering::SeqCst);
+            let _ = set_tray_icon_notification_state(&handle, alert_active);
+        }
+    });
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn show_system_notification(summary: &str, body: &str) -> Result<(), String> {
+    let notify_result = notify_rust::Notification::new()
+        .appname("Another Taskbar")
+        .summary(summary)
+        .body(body)
+        .show();
+
+    notify_result
+        .map(|_| ())
+        .map_err(|error| format!("Windows notification failed: {error}"))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn show_system_notification(_summary: &str, _body: &str) -> Result<(), String> {
+    Ok(())
+}
+
+fn show_due_notification(task: &crate::tasks::DueTaskNotification) {
+    let message = format!(
+        "\"{}\" is due in {} minutes.",
+        task.task_name, task.minutes_until_due
+    );
+    if let Err(error) = show_system_notification("Another Taskbar", &message) {
+        eprintln!("[notification] failed to show due notification: {error}");
+    }
+}
+
 pub fn run_gui_app() -> tauri::Result<()> {
     #[cfg(target_os = "linux")]
     prepare_linux_ime_environment();
@@ -584,6 +842,10 @@ pub fn run_gui_app() -> tauri::Result<()> {
             manager: Mutex::new(runtime.manager),
             taskbar_path: Mutex::new(runtime.taskbar_path),
             settings: Mutex::new(runtime.settings),
+            notified_task_ids: Mutex::new(HashSet::new()),
+            pending_notification_task_id: Mutex::new(None),
+            tray_alert_active: AtomicBool::new(false),
+            tray_flash_worker_running: AtomicBool::new(false),
         })
         .invoke_handler(tauri::generate_handler![
             load_app_state,
@@ -600,7 +862,75 @@ pub fn run_gui_app() -> tauri::Result<()> {
             set_theme,
             import_theme_file_cmd,
             delete_all_data_and_exit,
-            reload_taskbar_file
+            reload_taskbar_file,
+            check_upcoming_tasks,
+            poll_due_task_notifications,
+            send_test_notification,
+            flash_tray_icon,
+            exit_app,
+            minimize_to_tray
         ])
+        .setup(|app| {
+            let tray_id = current_tray_id(app.handle());
+
+            if let Some(tray) = app.tray_by_id(&tray_id) {
+                let menu = MenuBuilder::new(app)
+                    .text("tray_show", "Show Window")
+                    .separator()
+                    .text("tray_quit", "Quit")
+                    .build()?;
+                tray.set_menu(Some(menu))?;
+                if let Ok(icon) = load_default_tray_icon() {
+                    let _ = tray.set_icon(Some(icon));
+                }
+            }
+
+            if let Err(error) = show_system_notification(
+                "Another Taskbar",
+                "Startup test: notifications are enabled.",
+            ) {
+                eprintln!("[notification] startup test notification failed: {error}");
+            }
+
+            Ok(())
+        })
+        .on_menu_event(|app, event| {
+            if event.id() == "tray_show" {
+                show_main_window(app);
+            } else if event.id() == "tray_quit" {
+                app.exit(0);
+            }
+        })
+        .on_tray_icon_event(|app, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main_window(app);
+            }
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+
+                // Try to trigger the close confirmation dialog on frontend
+                let handle = window.app_handle().clone();
+                let window_label = window.label().to_string();
+
+                // Use a webview to call the close handler function
+                std::thread::spawn(move || {
+                    // Give the event loop time to process
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+
+                    if let Some(w) = handle.get_webview_window(&window_label) {
+                        // Call the JavaScript function directly through eval
+                        let script = "window.handleCloseRequest?.()";
+                        let _ = w.eval(script);
+                    }
+                });
+            }
+        })
         .run(tauri::generate_context!())
 }

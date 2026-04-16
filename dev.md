@@ -1,10 +1,13 @@
 # issues
-can't show chinese caption normally.
-can't input chinese.
+-[x] can't show chinese caption normally.
+-[x] can't input chinese.
 
 # todo
 -[ ] input simulation to preview pictures.
--[ ] change the display based on application resolution.
--[ ] add more fonts and themes.
+-[x] change the display based on application resolution.
+-[x] add more fonts and themes.
 -[ ] anroid application.
 -[ ] cloud sync.
+-[ ] pop up notification when the time is up.
+-[ ] test cli for windows.
+-[ ] background application.

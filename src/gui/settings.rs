@@ -15,6 +15,13 @@ pub const DEFAULT_LANGUAGE: AppLanguage = AppLanguage::English;
 const DARK_THEME_TOML: &str = include_str!("../../themes/dark.toml");
 const LIGHT_THEME_TOML: &str = include_str!("../../themes/light.toml");
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CloseAction {
+    MinimizeToTray,
+    ExitApp,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GuiSettings {
     pub selected_theme: String,
@@ -32,6 +39,10 @@ pub struct GuiSettings {
     pub task_data_directory: String,
     #[serde(default = "default_ui_scale")]
     pub ui_scale: f32,
+    #[serde(default = "default_remember_close_action")]
+    pub remember_close_action: bool,
+    #[serde(default = "default_close_action")]
+    pub remembered_close_action: CloseAction,
 }
 
 impl Default for GuiSettings {
@@ -45,6 +56,8 @@ impl Default for GuiSettings {
             auto_complete_parent_tasks: default_auto_complete_parent_tasks(),
             task_data_directory: default_task_data_directory(),
             ui_scale: default_ui_scale(),
+            remember_close_action: default_remember_close_action(),
+            remembered_close_action: default_close_action(),
         }
     }
 }
@@ -73,6 +86,14 @@ fn default_task_data_directory() -> String {
 
 fn default_ui_scale() -> f32 {
     1.0
+}
+
+fn default_remember_close_action() -> bool {
+    false
+}
+
+fn default_close_action() -> CloseAction {
+    CloseAction::MinimizeToTray
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

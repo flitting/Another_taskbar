@@ -15,7 +15,11 @@
         "height": 800,
         "resizable": true
       }
-    ]
+    ],
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "tooltip": "Another Taskbar"
+    }
   },
   "bundle": {
     "active": true,

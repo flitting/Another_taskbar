@@ -4,6 +4,13 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Task Manager</title>
+        <!-- Split CSS modules for better organization -->
+        <link rel="stylesheet" href="styles/theme.css" />
+        <link rel="stylesheet" href="styles/base.css" />
+        <link rel="stylesheet" href="styles/layout.css" />
+        <link rel="stylesheet" href="styles/components.css" />
+        <link rel="stylesheet" href="styles/interactions.css" />
+        <!-- Fallback to original styles.css if split files don't load -->
         <link rel="stylesheet" href="styles.css" />
     </head>
     <body>
@@ -325,6 +332,12 @@
                         >Auto complete parent tasks</span
                     >
                 </label>
+                <label class="check-inline">
+                    <input id="settings-remember-close-action" type="checkbox" />
+                    <span id="settings-remember-close-action-label"
+                        >Remember close action from exit dialog</span
+                    >
+                </label>
                 <label id="settings-task-font-size-label">
                     Task Font Size
                     <input
@@ -574,6 +587,32 @@
                 <button id="confirm-ok-btn" class="danger" type="button">
                     Confirm
                 </button>
+            </div>
+        </dialog>
+
+        <dialog id="close-modal" class="modal close-modal">
+            <div class="modal-head">
+                <h2 id="close-modal-title">Close Application</h2>
+            </div>
+            <div class="modal-body">
+                <p id="close-modal-message">
+                    What would you like to do?
+                </p>
+                <label class="check-inline">
+                    <input id="close-remember-choice" type="checkbox" />
+                    <span id="close-remember-choice-label"
+                        >Remember this choice</span
+                    >
+                </label>
+            </div>
+            <div class="modal-foot">
+                <button id="close-minimize-btn" class="primary" type="button">
+                    Minimize to Tray
+                </button>
+                <button id="close-exit-btn" class="danger" type="button">
+                    Exit Application
+                </button>
+                <button id="close-cancel-btn" type="button">Cancel</button>
             </div>
         </dialog>
 

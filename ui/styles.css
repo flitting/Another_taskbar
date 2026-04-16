@@ -627,6 +627,10 @@ optgroup {
     overflow: auto;
 }
 
+.settings-modal .modal-body {
+    padding-right: 6px;
+}
+
 .task-modal {
     width: min(620px, 78vw);
 }
@@ -818,6 +822,11 @@ optgroup {
     gap: 4px;
 }
 
+.select-list.open-up .select-menu {
+    top: auto;
+    bottom: calc(100% + 4px);
+}
+
 .select-option {
     border: none;
     text-align: left;
@@ -881,6 +890,19 @@ select:focus {
 
 .time-modal {
     width: min(560px, 80vw);
+    overflow: visible;
+}
+
+.time-modal .modal-body,
+.time-modal .time-row,
+.time-modal label,
+.time-modal .select-list {
+    overflow: visible;
+}
+
+.time-modal .select-menu {
+    max-height: min(48vh, 360px);
+    overflow-y: auto;
 }
 
 .recurrence-modal {
@@ -914,6 +936,15 @@ select:focus {
     display: flex !important;
     align-items: center;
     gap: 8px;
+}
+
+.settings-modal .check-inline {
+    align-items: flex-start;
+}
+
+.settings-modal .check-inline span {
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .tag-input-row {

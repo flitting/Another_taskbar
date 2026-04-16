@@ -1,0 +1,20 @@
+/* CSS Variables and Theme Configuration */
+
+:root {
+    --bg: #191a26;
+    --panel: #232434;
+    --panel-soft: #2f3142;
+    --row: #31344a;
+    --row-inner: #5a5776;
+    --border: #4a86cf;
+    --text: #f3f3fa;
+    --muted: #b5b7c7;
+    --accent: #666a7e;
+    --accent-2: #3977b8;
+    --danger: #d47272;
+    --input-bg: #1d1f2b;
+    --chip-bg: #3a3c45;
+    --chip-active: #6a80b8;
+    --task-font-size: 14px;
+    --modal-font-size: 14px;
+}

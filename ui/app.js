@@ -81,6 +81,9 @@ const els = {
   settingsAutoCompleteParents: document.getElementById(
     "settings-auto-complete-parents",
   ),
+  settingsRememberCloseAction: document.getElementById(
+    "settings-remember-close-action",
+  ),
   settingsTaskFontSize: document.getElementById("settings-task-font-size"),
   settingsTaskFontSizeValue: document.getElementById(
     "settings-task-font-size-value",
@@ -135,6 +138,14 @@ const els = {
   confirmMessage: document.getElementById("confirm-message"),
   confirmCancelBtn: document.getElementById("confirm-cancel-btn"),
   confirmOkBtn: document.getElementById("confirm-ok-btn"),
+  closeModal: document.getElementById("close-modal"),
+  closeMinimizeBtn: document.getElementById("close-minimize-btn"),
+  closeExitBtn: document.getElementById("close-exit-btn"),
+  closeCancelBtn: document.getElementById("close-cancel-btn"),
+  closeModalTitle: document.getElementById("close-modal-title"),
+  closeModalMessage: document.getElementById("close-modal-message"),
+  closeRememberChoice: document.getElementById("close-remember-choice"),
+  closeRememberChoiceLabel: document.getElementById("close-remember-choice-label"),
   hoverTip: document.getElementById("hover-tip"),
   dragZones: document.getElementById("drag-zones"),
   dragDeleteZone: document.getElementById("drag-delete-zone"),
@@ -180,6 +191,7 @@ const app = {
     ghost: null,
     autoScrollTimer: null,
   },
+  dueNotificationTimer: null,
   strings: {},
 };
 
@@ -329,6 +341,187 @@ function askConfirmation(title, message, confirmLabel = null) {
     modal.showModal();
   });
 }
+
+async function askCloseApplication() {
+  return new Promise((resolve) => {
+    console.log("[close] showing close dialog");
+
+    const modal = els.closeModal;
+    const minimizeBtn = els.closeMinimizeBtn;
+    const exitBtn = els.closeExitBtn;
+    const cancelBtn = els.closeCancelBtn;
+    const rememberChoice = els.closeRememberChoice;
+
+    if (modal.open) {
+      console.log("[close] modal already open, force close before reuse");
+      modal.close();
+    }
+    rememberChoice.checked = app.snapshot?.settings?.remember_close_action === true;
+
+    let settled = false;
+
+    const cleanup = () => {
+      console.log("[close] cleanup listeners");
+      minimizeBtn.removeEventListener("click", onMinimize);
+      exitBtn.removeEventListener("click", onExit);
+      cancelBtn.removeEventListener("click", onCancel);
+      modal.removeEventListener("cancel", onCancelEvent);
+      modal.removeEventListener("close", onClose);
+    };
+
+    const finish = (action, source) => {
+      if (settled) {
+        console.log("[close] finish ignored", { action, source });
+        return;
+      }
+      settled = true;
+      console.log("[close] finish", { action, source });
+      cleanup();
+      resolve({ action, remember: rememberChoice.checked });
+    };
+
+    const onMinimize = (event) => {
+      console.log("[close] minimize button clicked");
+      event.preventDefault();
+      event.stopPropagation();
+      if (modal.open) {
+        modal.close("minimize");
+      }
+    };
+
+    const onExit = (event) => {
+      console.log("[close] exit button clicked");
+      event.preventDefault();
+      event.stopPropagation();
+      if (modal.open) {
+        modal.close("exit");
+      }
+    };
+
+    const onCancel = (event) => {
+      console.log("[close] cancel button clicked");
+      event.preventDefault();
+      event.stopPropagation();
+      if (modal.open) {
+        modal.close("cancel");
+      }
+    };
+
+    const onCancelEvent = (event) => {
+      console.log("[close] dialog cancel event fired");
+      event.preventDefault();
+      if (modal.open) {
+        modal.close("cancel");
+      }
+    };
+
+    const onClose = () => {
+      const rv = modal.returnValue;
+      console.log("[close] dialog close event fired", { returnValue: rv });
+
+      if (rv === "minimize") {
+        finish("minimize", "close-minimize");
+      } else if (rv === "exit") {
+        finish("exit", "close-exit");
+      } else {
+        finish("cancel", "close-cancel");
+      }
+    };
+
+    minimizeBtn.addEventListener("click", onMinimize);
+    exitBtn.addEventListener("click", onExit);
+    cancelBtn.addEventListener("click", onCancel);
+    modal.addEventListener("cancel", onCancelEvent);
+    modal.addEventListener("close", onClose);
+
+    console.log("[close] showModal()");
+    modal.showModal();
+  });
+}
+
+async function handleCloseRequest() {
+  console.log("[app] handling close request");
+  const rememberedAction = app.snapshot?.settings?.remembered_close_action;
+  const shouldRemember = app.snapshot?.settings?.remember_close_action === true;
+  if (
+    shouldRemember &&
+    (rememberedAction === "minimize_to_tray" || rememberedAction === "exit_app")
+  ) {
+    if (rememberedAction === "minimize_to_tray") {
+      await safeInvoke("minimize_to_tray", {}).catch((err) => {
+        console.error("[app] failed to minimize:", err);
+      });
+      return;
+    }
+    await safeInvoke("exit_app", {}).catch((err) => {
+      console.error("[app] failed to exit:", err);
+    });
+    return;
+  }
+
+  const { action, remember } = await askCloseApplication();
+
+  if (action === "minimize" || action === "exit") {
+    const remembered_close_action =
+      action === "minimize" ? "minimize_to_tray" : "exit_app";
+    const settings = buildSettingsPayloadFromCurrent({
+      remember_close_action: remember,
+      remembered_close_action,
+    });
+    await safeInvoke("save_gui_settings_cmd", { settings }).catch((err) => {
+      console.error("[app] failed to save close action preference:", err);
+    });
+    await refresh();
+  }
+  
+  if (action === "minimize") {
+    console.log("[app] minimizing to tray");
+    await safeInvoke("minimize_to_tray", {}).catch((err) => {
+      console.error("[app] failed to minimize:", err);
+    });
+  } else if (action === "exit") {
+    console.log("[app] exiting application");
+    await safeInvoke("exit_app", {}).catch((err) => {
+      console.error("[app] failed to exit:", err);
+    });
+  } else {
+    console.log("[app] close cancelled");
+  }
+}
+
+async function flashTrayIcon() {
+  console.log("[app] flashing tray icon");
+  try {
+    await invoke("flash_tray_icon", {});
+  } catch (error) {
+    console.error("[app] failed to flash tray icon:", error);
+  }
+}
+
+async function checkNotifications() {
+  console.log("[app] checking for upcoming notifications");
+  try {
+    let upcoming;
+    try {
+      upcoming = await safeInvoke("poll_due_task_notifications", {
+        minutesThreshold: 15,
+      });
+    } catch {
+      upcoming = await safeInvoke("poll_due_task_notifications", {
+        minutes_threshold: 15,
+      });
+    }
+    if (upcoming && upcoming.length > 0) {
+      console.log("[app] found upcoming tasks:", upcoming);
+      await flashTrayIcon();
+      return upcoming;
+    }
+  } catch (error) {
+    console.error("[app] failed to check notifications:", error);
+  }
+  return [];
+}
+
 async function invokeCreateTask(parentId, draft) {
   try {
     return await safeInvoke("create_task", { parentId, draft });
@@ -914,6 +1107,68 @@ function stateLabel(value) {
   }
 }
 
+function closeSelectList(controlEl) {
+  if (!controlEl) return;
+  controlEl.classList.remove("open", "open-up");
+  const menu = controlEl.querySelector(".select-menu");
+  if (!menu) return;
+  menu.style.position = "";
+  menu.style.left = "";
+  menu.style.top = "";
+  menu.style.width = "";
+  menu.style.maxHeight = "";
+  menu.style.overflowY = "";
+  menu.style.zIndex = "";
+}
+
+function closeAllSelectMenus(exceptEl = null) {
+  document.querySelectorAll(".select-list.open").forEach((node) => {
+    if (node === exceptEl) return;
+    closeSelectList(node);
+  });
+}
+
+function positionSelectMenu(controlEl) {
+  if (!controlEl?.classList?.contains("open")) return;
+  const trigger = controlEl.querySelector(".select-trigger");
+  const menu = controlEl.querySelector(".select-menu");
+  if (!trigger || !menu) return;
+
+  const rect = trigger.getBoundingClientRect();
+  const viewportPad = 10;
+  const width = Math.max(160, rect.width);
+  const maxHeight = Math.max(180, Math.min(360, Math.round(window.innerHeight * 0.5)));
+  const estimatedHeight = Math.min(menu.scrollHeight + 12, maxHeight);
+  const spaceBelow = window.innerHeight - rect.bottom - viewportPad;
+  const spaceAbove = rect.top - viewportPad;
+  const openUpward = spaceBelow < Math.min(estimatedHeight, 220) && spaceAbove > spaceBelow;
+
+  let left = rect.left;
+  if (left + width + viewportPad > window.innerWidth) {
+    left = window.innerWidth - width - viewportPad;
+  }
+  if (left < viewportPad) left = viewportPad;
+
+  const top = openUpward
+    ? Math.max(viewportPad, rect.top - estimatedHeight - 4)
+    : Math.max(viewportPad, rect.bottom + 4);
+
+  controlEl.classList.toggle("open-up", openUpward);
+  menu.style.position = "fixed";
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.top = `${Math.round(top)}px`;
+  menu.style.width = `${Math.round(width)}px`;
+  menu.style.maxHeight = `${maxHeight}px`;
+  menu.style.overflowY = "auto";
+  menu.style.zIndex = "120000";
+}
+
+function updateOpenSelectMenuPositions() {
+  document.querySelectorAll(".select-list.open").forEach((node) => {
+    positionSelectMenu(node);
+  });
+}
+
 function renderSelectList(
   controlEl,
   options,
@@ -952,7 +1207,7 @@ function renderSelectList(
       for (const item of menu.querySelectorAll(".select-option")) {
         item.classList.toggle("active", item.dataset.value === value);
       }
-      controlEl.classList.remove("open");
+      closeSelectList(controlEl);
       if (typeof onChange === "function") {
         onChange(value);
       }
@@ -962,10 +1217,13 @@ function renderSelectList(
 
   trigger.addEventListener("click", () => {
     const opening = !controlEl.classList.contains("open");
-    document
-      .querySelectorAll(".select-list.open")
-      .forEach((node) => node.classList.remove("open"));
-    if (opening) controlEl.classList.add("open");
+    closeAllSelectMenus(controlEl);
+    if (opening) {
+      controlEl.classList.add("open");
+      positionSelectMenu(controlEl);
+    } else {
+      closeSelectList(controlEl);
+    }
   });
 }
 
@@ -977,9 +1235,9 @@ function setupHoverTips() {
   const tip = els.hoverTip;
   if (!tip) return;
 
-  function pickTipHost(target) {
-    const insideDialog = target?.closest("dialog[open]");
-    return insideDialog || document.body;
+  function pickTipHost() {
+    // Keep tooltips in the top-level layer so modal scrolling/clipping never cuts text.
+    return document.body;
   }
 
   function showAt(target, x, y, text) {
@@ -1102,19 +1360,34 @@ function confirmCascadeMessage(nextState) {
   );
 }
 
-async function saveSortMode(value) {
-  const current = app.snapshot?.settings;
-  if (!current || current.task_sort_mode === value) return;
-  const settings = {
-    selected_theme: current.selected_theme,
-    task_font_size: current.task_font_size,
-    selected_language: current.selected_language,
-    task_sort_mode: value,
+function currentSettingsSnapshot() {
+  return app.snapshot?.settings || {};
+}
+
+function buildSettingsPayloadFromCurrent(overrides = {}) {
+  const current = currentSettingsSnapshot();
+  return {
+    selected_theme: current.selected_theme || "dark",
+    task_font_size: Number(current.task_font_size ?? 14),
+    selected_language: current.selected_language || "en",
+    task_sort_mode: current.task_sort_mode || "Custom",
     enabled_optional_states: current.enabled_optional_states || [],
     auto_complete_parent_tasks: current.auto_complete_parent_tasks !== false,
     task_data_directory: current.task_data_directory || "",
-    ui_scale: current.ui_scale ?? 1.0,
+    ui_scale: Number(current.ui_scale ?? 1.0),
+    remember_close_action: current.remember_close_action === true,
+    remembered_close_action:
+      current.remembered_close_action || "minimize_to_tray",
+    ...overrides,
   };
+}
+
+async function saveSortMode(value) {
+  const current = app.snapshot?.settings;
+  if (!current || current.task_sort_mode === value) return;
+  const settings = buildSettingsPayloadFromCurrent({
+    task_sort_mode: value,
+  });
   await safeInvoke("save_gui_settings_cmd", { settings });
   await refresh();
 }
@@ -1414,6 +1687,12 @@ function applyLocalizedText() {
   document.getElementById("settings-auto-complete-parents-label").textContent =
     t("auto_complete_parent_tasks", "Auto complete parent tasks");
   document.getElementById(
+    "settings-remember-close-action-label",
+  ).textContent = t(
+    "remember_close_action_setting",
+    "Remember close action from exit dialog",
+  );
+  document.getElementById(
     "settings-task-font-size-label",
   ).childNodes[0].textContent = `${t("task_font_size", "Task Font Size")}\n`;
   document.getElementById(
@@ -1452,6 +1731,21 @@ function applyLocalizedText() {
   setTip(
     els.settingsDeleteDataBtn,
     t("delete_all_data_exit_help", "Delete all app data and quit immediately."),
+  );
+  els.closeModalTitle.textContent = t("close_app_title", "Close Application");
+  els.closeModalMessage.textContent = t(
+    "close_app_message",
+    "What would you like to do?",
+  );
+  els.closeMinimizeBtn.textContent = t(
+    "close_action_minimize",
+    "Minimize to Tray",
+  );
+  els.closeExitBtn.textContent = t("close_action_exit", "Exit Application");
+  els.closeCancelBtn.textContent = t("cancel", "Cancel");
+  els.closeRememberChoiceLabel.textContent = t(
+    "remember_close_choice",
+    "Remember this choice",
   );
   els.dragDeleteZone.textContent = t("delete", "Delete");
   els.dragCancelZone.textContent = t("cancel_drag", "Cancel Drag");
@@ -1639,6 +1933,15 @@ function openTaskSummaryModal(taskId) {
   els.summaryModal.showModal();
 }
 
+async function handleTrayOpenWithNotification(taskId) {
+  if (!Number.isFinite(taskId)) return;
+  await refresh();
+  const task = findTaskById(app.snapshot?.tasks || [], Number(taskId));
+  if (!task) return;
+  app.selectedId = task.id;
+  openTaskSummaryModal(task.id);
+}
+
 async function saveTaskFromModal() {
   const name = els.taskFormName.value.trim() || "Untitled";
   const nextState = getSegmentedValue(els.taskFormState) || "Todo";
@@ -1684,6 +1987,7 @@ async function saveTaskFromModal() {
 
   els.taskModal.close();
   await refresh();
+  await checkNotifications();
 }
 
 async function deleteTaskFromModal() {
@@ -1886,6 +2190,8 @@ function openSettingsModal() {
   }
   els.settingsAutoCompleteParents.checked =
     settings.auto_complete_parent_tasks !== false;
+  els.settingsRememberCloseAction.checked =
+    settings.remember_close_action === true;
   els.settingsTaskFontSize.value = String(settings.task_font_size ?? 14);
   applyTaskFontSize(settings.task_font_size ?? 14);
   applyUiScale(settings.ui_scale ?? 1.0);
@@ -1917,6 +2223,9 @@ async function saveSettings() {
       app.snapshot?.settings?.task_data_directory ||
       "",
     ui_scale: Number(els.settingsUiScale.value || 1),
+    remember_close_action: els.settingsRememberCloseAction.checked,
+    remembered_close_action:
+      app.snapshot?.settings?.remembered_close_action || "minimize_to_tray",
   };
 
   await safeInvoke("save_gui_settings_cmd", { settings });
@@ -2158,7 +2467,6 @@ function renderTaskRow(task, depth, parentId = 0) {
   title.className = "task-title";
   if (task.state === "Completed" || task.state === "Blocked") {
     title.classList.add("state-crossed");
-    title.style.setProperty("--strike-color", stateColor(task.state));
   }
   const nameSpan = document.createElement("span");
   nameSpan.className = "task-name-text";
@@ -2549,6 +2857,15 @@ async function refresh() {
   updateUndoButtonState();
 }
 
+function startDueNotificationPolling() {
+  if (app.dueNotificationTimer) {
+    clearInterval(app.dueNotificationTimer);
+  }
+  app.dueNotificationTimer = setInterval(() => {
+    checkNotifications();
+  }, 60 * 1000);
+}
+
 document.addEventListener("pointerdown", (event) => {
   if (
     !(event.target instanceof Element) ||
@@ -2560,11 +2877,20 @@ document.addEventListener("pointerdown", (event) => {
     return;
   }
   if (!event.target.closest(".select-list")) {
-    document
-      .querySelectorAll(".select-list.open")
-      .forEach((node) => node.classList.remove("open"));
+    closeAllSelectMenus();
   }
 });
+
+window.addEventListener("resize", () => {
+  updateOpenSelectMenuPositions();
+});
+document.addEventListener(
+  "scroll",
+  () => {
+    updateOpenSelectMenuPositions();
+  },
+  true,
+);
 
 els.taskBoard.addEventListener("mousemove", (event) => {
   const rect = els.taskBoard.getBoundingClientRect();
@@ -2737,6 +3063,10 @@ els.settingsUiScale.addEventListener("input", () => {
 els.confirmCancelBtn.addEventListener("click", () => els.confirmModal.close());
 els.errorCloseBtn.addEventListener("click", () => setError(""));
 
+els.closeMinimizeBtn.addEventListener("click", () => els.closeModal.close("minimize"));
+els.closeExitBtn.addEventListener("click", () => els.closeModal.close("exit"));
+els.closeCancelBtn.addEventListener("click", () => els.closeModal.close("cancel"));
+
 els.filterModalClose.addEventListener("click", () => els.filterModal.close());
 els.filterClearBtn.addEventListener("click", clearDraftFilters);
 els.filterApplyBtn.addEventListener("click", applyFilters);
@@ -2754,6 +3084,28 @@ els.taskFormPinned.addEventListener("click", () => {
   setPinnedValue(!getPinnedValue());
 });
 
+// Listen for close-requested event from Tauri backend
+if (window.__TAURI__) {
+  try {
+    const { listen } = window.__TAURI__.event;
+    if (listen) {
+      listen("close-requested", (event) => {
+        console.log("[app] close-requested event received:", event);
+        handleCloseRequest();
+      });
+    }
+  } catch (error) {
+    console.error("[app] failed to set up close listener:", error);
+  }
+}
+
+// Make close handler globally accessible for Rust eval()
+window.handleCloseRequest = handleCloseRequest;
+window.flashTrayIcon = flashTrayIcon;
+window.checkNotifications = checkNotifications;
+window.handleTrayOpenWithNotification = handleTrayOpenWithNotification;
+
 setupHoverTips();
 setupDatePickerGuard();
-refresh();
+startDueNotificationPolling();
+refresh().then(() => checkNotifications());
