@@ -9,11 +9,13 @@ use crate::tasks::{TaskSortMode, TaskState};
 
 const DEFAULT_THEME_NAME: &str = "dark";
 const LIGHT_THEME_NAME: &str = "light";
+const DEFAULT_THEME_FILE_NAME: &str = ".dark.toml";
+const LIGHT_THEME_FILE_NAME: &str = ".light.toml";
 pub const DEFAULT_TASK_FONT_SIZE: u16 = 14;
 pub const DEFAULT_LANGUAGE: AppLanguage = AppLanguage::English;
 
-const DARK_THEME_TOML: &str = include_str!("../../themes/dark.toml");
-const LIGHT_THEME_TOML: &str = include_str!("../../themes/light.toml");
+const DARK_THEME_TOML: &str = include_str!("../../themes/.dark.toml");
+const LIGHT_THEME_TOML: &str = include_str!("../../themes/.light.toml");
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -187,9 +189,32 @@ impl ThemePaletteFile {
 }
 
 pub fn initialize_theme_files() -> Result<(), String> {
-    fs::create_dir_all(custom_themes_dir()?)
+    let dir = custom_themes_dir()?;
+    fs::create_dir_all(&dir)
         .map_err(|error| format!("Failed to create themes dir: {error}"))?;
+    write_default_theme_file_if_missing(
+        &dir.join(DEFAULT_THEME_FILE_NAME),
+        DARK_THEME_TOML,
+        DEFAULT_THEME_FILE_NAME,
+    )?;
+    write_default_theme_file_if_missing(
+        &dir.join(LIGHT_THEME_FILE_NAME),
+        LIGHT_THEME_TOML,
+        LIGHT_THEME_FILE_NAME,
+    )?;
     Ok(())
+}
+
+fn write_default_theme_file_if_missing(
+    path: &Path,
+    content: &str,
+    label: &str,
+) -> Result<(), String> {
+    if path.exists() {
+        return Ok(());
+    }
+    fs::write(path, content)
+        .map_err(|error| format!("Failed to write default theme '{label}': {error}"))
 }
 
 pub fn load_gui_settings() -> GuiSettings {
@@ -271,6 +296,9 @@ pub fn available_theme_names() -> Result<Vec<String>, String> {
         }
 
         if let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) {
+            if stem == ".dark" || stem == ".light" {
+                continue;
+            }
             names.push(stem.to_string());
         }
     }
@@ -289,13 +317,33 @@ pub fn load_theme_palette(theme_name: &str) -> Result<ThemePalette, String> {
     initialize_theme_files()?;
 
     match theme_name {
-        DEFAULT_THEME_NAME => load_theme_palette_from_str(DARK_THEME_TOML, DEFAULT_THEME_NAME),
-        LIGHT_THEME_NAME => load_theme_palette_from_str(LIGHT_THEME_TOML, LIGHT_THEME_NAME),
+        DEFAULT_THEME_NAME => load_theme_palette_from_path_or_builtin(
+            &custom_themes_dir()?.join(DEFAULT_THEME_FILE_NAME),
+            DARK_THEME_TOML,
+            DEFAULT_THEME_NAME,
+        ),
+        LIGHT_THEME_NAME => load_theme_palette_from_path_or_builtin(
+            &custom_themes_dir()?.join(LIGHT_THEME_FILE_NAME),
+            LIGHT_THEME_TOML,
+            LIGHT_THEME_NAME,
+        ),
         _ => {
             let path = theme_path(theme_name)?;
             load_theme_palette_from_path(&path, theme_name)
         }
     }
+}
+
+fn load_theme_palette_from_path_or_builtin(
+    path: &Path,
+    builtin_content: &str,
+    fallback_name: &str,
+) -> Result<ThemePalette, String> {
+    if path.exists() {
+        return load_theme_palette_from_path(path, fallback_name)
+            .or_else(|_| load_theme_palette_from_str(builtin_content, fallback_name));
+    }
+    load_theme_palette_from_str(builtin_content, fallback_name)
 }
 
 pub fn load_theme_palette_from_path(

@@ -518,14 +518,9 @@ fn delete_all_data_and_exit(app_handle: AppHandle) -> Result<(), String> {
             const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
 
             let quoted_path = shell_quote_powershell(&path_str);
-            let parent_pid = std::process::id();
-
             let command = format!(
-                "$pidToWait={parent_pid}; \
-                 while (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 300 }}; \
-                 Start-Sleep -Milliseconds 800; \
-                 $target='{quoted_path}'; \
-                 for ($i=0; $i -lt 20; $i++) {{ \
+                "$target='{quoted_path}'; \
+                 for ($i=0; $i -lt 30; $i++) {{ \
                      if (-not (Test-Path -LiteralPath $target)) {{ exit 0 }}; \
                      Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue; \
                      if (-not (Test-Path -LiteralPath $target)) {{ exit 0 }}; \
@@ -570,7 +565,10 @@ fn delete_all_data_and_exit(app_handle: AppHandle) -> Result<(), String> {
     }
 
     let default_dir = crate::app_paths::data_dir()?;
-    schedule_delete_after_exit(default_dir.as_path())?;
+    if let Err(error) = crate::app_paths::clear_app_data() {
+        eprintln!("[cleanup] immediate delete failed, will retry after exit: {error}");
+        schedule_delete_after_exit(default_dir.as_path())?;
+    }
     app_handle.exit(0);
     Ok(())
 }
@@ -803,7 +801,6 @@ fn ensure_tray_flash_worker(app_handle: AppHandle) -> Result<(), String> {
 fn show_system_notification(summary: &str, body: &str) -> Result<(), String> {
     let notify_result = notify_rust::Notification::new()
         .appname("Another Taskbar")
-        .app_id("io.another_taskbar.another_taskbar")
         .summary(summary)
         .body(body)
         .show();
