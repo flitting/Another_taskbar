@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use chrono::{Duration, Utc};
+
 use crate::bootstrap::initialize_app_storage;
 use crate::files::{load_taskbar, save_taskbar, TaskbarDefaultPath, DEFAULT_TASKBAR_FILE_NAME};
 use crate::gui::settings::{load_gui_settings, GuiSettings};
@@ -43,6 +45,7 @@ pub fn persist_manager(path: &Path, manager: &TaskManager) -> Result<(), String>
 
 fn seeded_task_manager() -> TaskManager {
     let mut manager = TaskManager::new();
+    let now = Utc::now();
     let add = |manager: &mut TaskManager,
                parent_id: u32,
                name: &str,
@@ -50,7 +53,9 @@ fn seeded_task_manager() -> TaskManager {
                state: TaskState,
                urgency: Option<TaskUrgency>,
                importance: Option<TaskImportance>,
-               pinned: bool|
+               pinned: bool,
+               due_date: Option<chrono::DateTime<Utc>>,
+               completed_at: Option<chrono::DateTime<Utc>>|
      -> u32 {
         manager
             .create_task_from_draft(
@@ -63,8 +68,8 @@ fn seeded_task_manager() -> TaskManager {
                     importance,
                     tags: vec!["example".to_string()],
                     pinned,
-                    due_date: None,
-                    completed_at: None,
+                    due_date,
+                    completed_at,
                     recurrence: None,
                 },
             )
@@ -80,6 +85,8 @@ fn seeded_task_manager() -> TaskManager {
         Some(TaskUrgency::High),
         Some(TaskImportance::High),
         true,
+        Some(now + Duration::days(7)),
+        None,
     );
     if planning_id != 0 {
         let draft_id = add(
@@ -91,6 +98,8 @@ fn seeded_task_manager() -> TaskManager {
             Some(TaskUrgency::Low),
             None,
             false,
+            Some(now + Duration::days(8)),
+            None,
         );
         if draft_id != 0 {
             let _ = add(
@@ -102,6 +111,8 @@ fn seeded_task_manager() -> TaskManager {
                 None,
                 Some(TaskImportance::Low),
                 false,
+                None,
+                Some(now - Duration::days(3)),
             );
         }
         let _ = add(
@@ -113,6 +124,8 @@ fn seeded_task_manager() -> TaskManager {
             None,
             None,
             false,
+            None,
+            Some(now - Duration::days(2)),
         );
     }
 
@@ -125,6 +138,8 @@ fn seeded_task_manager() -> TaskManager {
         None,
         Some(TaskImportance::High),
         false,
+        Some(now + Duration::days(10)),
+        None,
     );
     let _ = add(
         &mut manager,
@@ -135,6 +150,8 @@ fn seeded_task_manager() -> TaskManager {
         Some(TaskUrgency::High),
         None,
         true,
+        None,
+        Some(now - Duration::days(1)),
     );
     let _ = add(
         &mut manager,
@@ -145,6 +162,8 @@ fn seeded_task_manager() -> TaskManager {
         None,
         None,
         false,
+        Some(now + Duration::days(14)),
+        None,
     );
 
     manager.sort_for_mode(&TaskSortMode::Custom);

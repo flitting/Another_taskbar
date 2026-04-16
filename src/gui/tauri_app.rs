@@ -30,6 +30,7 @@ struct SharedState {
     pending_notification_task_id: Mutex<Option<u32>>,
     tray_alert_active: AtomicBool,
     tray_flash_worker_running: AtomicBool,
+    ignore_all_notifications: AtomicBool,
 }
 
 const DEFAULT_TRAY_ICON_BYTES: &[u8] = include_bytes!("../../icons/icon.png");
@@ -438,6 +439,7 @@ fn import_theme_file_cmd(state: State<'_, SharedState>, path: String) -> Result<
 
 #[tauri::command]
 fn delete_all_data_and_exit(app_handle: AppHandle) -> Result<(), String> {
+    #[cfg(not(target_os = "windows"))]
     fn shell_quote_posix(value: &str) -> String {
         let escaped = value.replace('\'', r"'\''");
         format!("'{escaped}'")
@@ -590,6 +592,10 @@ fn poll_due_task_notifications(
     state: State<'_, SharedState>,
     minutes_threshold: Option<i64>,
 ) -> Result<Vec<crate::tasks::DueTaskNotification>, String> {
+    if state.ignore_all_notifications.load(Ordering::SeqCst) {
+        return Ok(Vec::new());
+    }
+
     let manager = state
         .manager
         .lock()
@@ -656,6 +662,21 @@ fn show_main_window(app: &AppHandle) {
     }
     clear_tray_notification_alert(app);
     open_pending_summary_from_tray(app);
+}
+
+fn ignore_all_notifications(app: &AppHandle) {
+    if let Some(state) = app.try_state::<SharedState>() {
+        state.ignore_all_notifications.store(true, Ordering::SeqCst);
+        state.tray_alert_active.store(false, Ordering::SeqCst);
+
+        if let Ok(mut pending) = state.pending_notification_task_id.lock() {
+            *pending = None;
+        }
+    }
+
+    if let Err(error) = set_tray_icon_notification_state(app, false) {
+        eprintln!("[tray] failed to reset tray icon while ignoring notifications: {error}");
+    }
 }
 
 fn load_default_tray_icon() -> Result<Image<'static>, String> {
@@ -782,6 +803,7 @@ fn ensure_tray_flash_worker(app_handle: AppHandle) -> Result<(), String> {
 fn show_system_notification(summary: &str, body: &str) -> Result<(), String> {
     let notify_result = notify_rust::Notification::new()
         .appname("Another Taskbar")
+        .app_id("io.another_taskbar.another_taskbar")
         .summary(summary)
         .body(body)
         .show();
@@ -822,6 +844,7 @@ pub fn run_gui_app() -> tauri::Result<()> {
             pending_notification_task_id: Mutex::new(None),
             tray_alert_active: AtomicBool::new(false),
             tray_flash_worker_running: AtomicBool::new(false),
+            ignore_all_notifications: AtomicBool::new(false),
         })
         .invoke_handler(tauri::generate_handler![
             load_app_state,
@@ -851,6 +874,8 @@ pub fn run_gui_app() -> tauri::Result<()> {
                 let menu = MenuBuilder::new(app)
                     .text("tray_show", "Show Window")
                     .separator()
+                    .text("tray_ignore_notifications", "Ignore All Notifications")
+                    .separator()
                     .text("tray_quit", "Quit")
                     .build()?;
                 tray.set_menu(Some(menu))?;
@@ -859,18 +884,13 @@ pub fn run_gui_app() -> tauri::Result<()> {
                 }
             }
 
-            if let Err(error) = show_system_notification(
-                "Another Taskbar",
-                "Startup test: notifications are enabled.",
-            ) {
-                eprintln!("[notification] startup test notification failed: {error}");
-            }
-
             Ok(())
         })
         .on_menu_event(|app, event| {
             if event.id() == "tray_show" {
                 show_main_window(app);
+            } else if event.id() == "tray_ignore_notifications" {
+                ignore_all_notifications(app);
             } else if event.id() == "tray_quit" {
                 app.exit(0);
             }
